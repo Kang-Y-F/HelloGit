@@ -36,8 +36,8 @@
 		<!-- MyBatis-Plus（自带连接池、事务、MyBatis，无需其他 MyBatis 依赖） -->
 		<dependency>
 			<groupId>com.baomidou</groupId>
-			<artifactId>mybatis-plus-boot-starter</artifactId>
-			<version>3.5.6</version>
+			<artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+			<version>3.5.9</version>
 		</dependency>
 
 		<!-- Spring AI -->
@@ -54,6 +54,20 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
+		<!-- Lombok -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+		<!-- JWT -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt</artifactId>
+			<version>0.9.1</version>
 		</dependency>
 
 		<!-- 测试 & 热部署 -->
