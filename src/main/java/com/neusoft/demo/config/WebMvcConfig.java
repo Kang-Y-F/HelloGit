@@ -24,6 +24,10 @@ public class WebMvcConfig
                 .excludePathPatterns(
                         "/user/login",
                         "/user/register",
+                        "/doctor/login",
+                        "/admin/login",
+                        // "/doctor/add",
+                        "/admin/add",
                         "/error"
                 );
     }

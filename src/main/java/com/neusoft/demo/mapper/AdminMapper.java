@@ -1,9 +1,10 @@
 package com.neusoft.demo.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.neusoft.demo.entity.User;
+import com.neusoft.demo.entity.Admin;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface UserMapper extends BaseMapper<User> {
+public interface AdminMapper extends BaseMapper<Admin> {
+
 }

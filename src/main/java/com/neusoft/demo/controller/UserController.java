@@ -3,8 +3,8 @@ package com.neusoft.demo.controller;
 import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.LoginDTO;
 import com.neusoft.demo.dto.RegisterDTO;
-import com.neusoft.demo.entity.User;
-import com.neusoft.demo.service.UserService;
+import com.neusoft.demo.service.PmiPatientService;
+import com.neusoft.demo.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,32 +13,27 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     @Autowired
-    private UserService userService;
+    private PmiPatientService pmiPatientService;
 
     @PostMapping("/login")
-    public Result login(@RequestBody LoginDTO loginDTO){
+    public Result<LoginVO> login(
+            @RequestBody LoginDTO loginDTO){
 
-        User user = userService.login(loginDTO);
+        LoginVO loginVO =
+                pmiPatientService.login(loginDTO);
 
-        if(user == null){
+        if(loginVO == null){
             return Result.fail("用户不存在");
         }
 
-        return Result.success(user);
+        return Result.success(loginVO);
     }
 
     @PostMapping("/register")
-    public Result<?> register(
-            @RequestBody RegisterDTO registerDTO
-    ) {
+    public Result<String> register(
+            @RequestBody RegisterDTO registerDTO){
 
-        boolean result =
-                userService.register(registerDTO);
-
-        if (!result) {
-
-            return Result.fail("手机号已存在");
-        }
+        pmiPatientService.register(registerDTO);
 
         return Result.success("注册成功");
     }

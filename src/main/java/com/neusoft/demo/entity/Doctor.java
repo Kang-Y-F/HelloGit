@@ -1,7 +1,9 @@
 package com.neusoft.demo.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+@TableName("doctor")
 @Data
 public class Doctor {
 

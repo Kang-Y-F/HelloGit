@@ -1,9 +1,9 @@
 package com.neusoft.demo.controller;
 
 import com.neusoft.demo.common.Result;
-import com.neusoft.demo.dto.DoctorAddDTO;
+import com.neusoft.demo.dto.AdminAddDTO;
 import com.neusoft.demo.dto.LoginDTO;
-import com.neusoft.demo.service.DoctorService;
+import com.neusoft.demo.service.AdminService;
 import com.neusoft.demo.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,18 +12,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/doctor")
-public class DoctorController {
+@RequestMapping("/admin")
+public class AdminController {
 
     @Autowired
-    private DoctorService doctorService;
+    private AdminService adminService;
 
     @PostMapping("/login")
     public Result<LoginVO> login(
             @RequestBody LoginDTO loginDTO){
 
         LoginVO loginVO =
-                doctorService.login(loginDTO);
+                adminService.login(loginDTO);
 
         if(loginVO == null){
             return Result.fail("账号或密码错误");
@@ -33,11 +33,11 @@ public class DoctorController {
     }
 
     @PostMapping("/add")
-    public Result<String> addDoctor(
-            @RequestBody DoctorAddDTO dto){
+    public Result<String> addAdmin(
+            @RequestBody AdminAddDTO dto){
 
-        doctorService.addDoctor(dto);
+        adminService.addAdmin(dto);
 
-        return Result.success("新增医生成功");
+        return Result.success("新增管理员成功");
     }
 }

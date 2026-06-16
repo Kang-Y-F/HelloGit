@@ -2,14 +2,12 @@ package com.neusoft.demo.dto;
 
 import lombok.Data;
 
-
 @Data
-public class RegisterDTO {
+public class AdminAddDTO {
 
-    private String phone;
+    private String username;
 
     private String password;
 
     private String name;
-
 }

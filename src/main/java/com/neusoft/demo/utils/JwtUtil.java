@@ -2,19 +2,25 @@ package com.neusoft.demo.utils;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 public class JwtUtil {
 
     // 密钥（后期可以放到配置文件）
     private static final String SECRET_KEY =
-            "cloudBrainHospital2026";
+            "cloudBrainHospital2026SecureKey!@#$%^&*()_+";
 
     // token有效期（24小时）
     private static final long EXPIRE_TIME =
             24 * 60 * 60 * 1000;
+
+    private static final SecretKey KEY = Keys.hmacShaKeyFor(
+            SECRET_KEY.getBytes(StandardCharsets.UTF_8)
+    );
 
     /**
      * 生成Token
@@ -25,17 +31,9 @@ public class JwtUtil {
         return Jwts.builder()
                 .claim("userId", userId)
                 .claim("role", role)
-                .setIssuedAt(new Date())
-                .setExpiration(
-                        new Date(
-                                System.currentTimeMillis()
-                                        + EXPIRE_TIME
-                        )
-                )
-                .signWith(
-                        SignatureAlgorithm.HS256,
-                        SECRET_KEY
-                )
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + EXPIRE_TIME))
+                .signWith(KEY)
                 .compact();
     }
 
@@ -45,9 +43,10 @@ public class JwtUtil {
     public static Claims parseToken(String token) {
 
         return Jwts.parser()
-                .setSigningKey(SECRET_KEY)
-                .parseClaimsJws(token)
-                .getBody();
+                .verifyWith(KEY)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     /**
