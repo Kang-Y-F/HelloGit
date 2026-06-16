@@ -12,6 +12,8 @@ import com.neusoft.demo.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class DoctorServiceImpl implements DoctorService {
 
@@ -89,5 +91,12 @@ public class DoctorServiceImpl implements DoctorService {
         d.setSkills(dto.getSkills());
 
         doctorMapper.insert(d);
+    }
+
+    @Override
+    public List<Doctor> list() {
+
+        return doctorMapper.selectList(null);
+
     }
 }

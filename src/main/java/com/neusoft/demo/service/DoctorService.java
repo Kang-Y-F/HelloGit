@@ -11,4 +11,6 @@ public interface DoctorService {
     LoginVO login(LoginDTO loginDTO);
 
     void addDoctor(DoctorAddDTO dto);
+
+    List<Doctor> list();
 }

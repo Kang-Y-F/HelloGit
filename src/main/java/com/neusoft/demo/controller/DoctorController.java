@@ -3,13 +3,13 @@ package com.neusoft.demo.controller;
 import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.DoctorAddDTO;
 import com.neusoft.demo.dto.LoginDTO;
+import com.neusoft.demo.entity.Doctor;
 import com.neusoft.demo.service.DoctorService;
 import com.neusoft.demo.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/doctor")
@@ -39,5 +39,14 @@ public class DoctorController {
         doctorService.addDoctor(dto);
 
         return Result.success("新增医生成功");
+    }
+
+    @GetMapping("/list")
+    public Result<List<Doctor>> list(){
+
+        List<Doctor> list = doctorService.list();
+
+        return Result.success(list);
+
     }
 }
