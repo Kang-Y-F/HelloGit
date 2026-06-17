@@ -1,4 +1,9 @@
 package com.neusoft.demo.mapper;
 
-public interface PrescriptionMapper {
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.neusoft.demo.entity.Prescription;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface PrescriptionMapper extends BaseMapper<Prescription> {
 }
