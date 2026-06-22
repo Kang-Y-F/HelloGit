@@ -1,7 +1,9 @@
 package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.LoginDTO;
+import com.neusoft.demo.dto.PatientUpdateDTO;
 import com.neusoft.demo.dto.RegisterDTO;
 import com.neusoft.demo.entity.PmiPatient;
 import com.neusoft.demo.mapper.PmiPatientMapper;
@@ -9,6 +11,7 @@ import com.neusoft.demo.service.PmiPatientService;
 import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.utils.PasswordUtil;
 import com.neusoft.demo.vo.LoginVO;
+import com.neusoft.demo.vo.PatientInfoVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -71,5 +74,33 @@ public class PmiPatientServiceImpl implements PmiPatientService {
         );
 
         pmiPatientMapper.insert(p);
+    }
+
+    @Override
+    public PatientInfoVO getPatientInfoById(Long userId) {
+        // 1. 根据ID查询患者实体
+        PmiPatient patient = pmiPatientMapper.selectById(userId);
+        if (patient == null) {
+            return null;
+        }
+        // 2. 实体转VO，脱敏返回
+        PatientInfoVO vo = new PatientInfoVO();
+        vo.setId(patient.getId());
+        vo.setName(patient.getName());
+        vo.setPhone(patient.getPhone());
+        vo.setAvatar(patient.getAvatar()); // 设置头像URL
+        return vo;
+    }
+
+    @Override
+    public boolean updatePatientInfo(Long userId, PatientUpdateDTO dto) {
+        LambdaUpdateWrapper<PmiPatient> wrapper = new LambdaUpdateWrapper<>();
+        wrapper
+                .eq(PmiPatient::getId, userId)
+                .set(PmiPatient::getName, dto.getName())
+                .set(PmiPatient::getAvatar, dto.getAvatar());
+        // mybatis-plus update 返回受影响行数
+        int rows = pmiPatientMapper.update(null, wrapper);
+        return rows > 0;
     }
 }

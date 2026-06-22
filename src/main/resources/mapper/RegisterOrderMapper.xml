@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+
+<mapper namespace="com.neusoft.demo.mapper.RegisterOrderMapper">
+
+
+    <select id="getPatientDetail"
+            resultType="com.neusoft.demo.vo.RegisterOrderVO">
+
+
+        SELECT
+
+            ro.id,
+
+            p.name AS patientName,
+
+            d.name AS doctorName,
+
+            dep.name AS departmentName,
+
+            ro.create_time AS visitTime,
+
+            ro.status
+
+
+        FROM register_order ro
+
+
+                 LEFT JOIN pmi_patient p
+                           ON ro.user_id = p.id
+
+
+                 LEFT JOIN doctor d
+                           ON ro.doctor_id = d.id
+
+
+                 LEFT JOIN department dep
+                           ON d.dept_id = dep.id
+
+
+        WHERE ro.id = #{id}
+
+
+    </select>
+
+
+</mapper>
