@@ -30,14 +30,10 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Autowired private MedicalRecordMapper    medicalRecordMapper;
     @Autowired private AiOperationLogMapper   aiLogMapper;
     @Autowired private ChatClient             chatClient;
-    @Autowired
-    private MedicalRecordMapper medicalRecordMapper;
 
     @Autowired
     private DoctorMapper doctorMapper;
 
-    @Autowired
-    private ChatClient chatClient;
 
     // 日期格式化
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");

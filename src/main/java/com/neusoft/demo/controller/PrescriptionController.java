@@ -28,13 +28,13 @@ public class PrescriptionController {
     /**
      * 查询患者所有用药记录
      * 关联 medical_order 通过 order_id 找到该患者的所有处方
-     * P2 患者端：我的处方列表
-     * GET /prescription/my-list
-     * 需要JWT登录鉴权，自动从token取患者id
      */
     @GetMapping("/patient/{patientId}")
     public Result<?> getByPatient(@PathVariable Long patientId) {
         List<Prescription> list = prescriptionMapper.selectByPatientId(patientId);
+        return Result.success(list);
+    }
+
     @GetMapping("/my-list")
     public Result<List<PatientPrescriptionVO>> myPrescription(HttpServletRequest request) {
         Object userIdObj = request.getAttribute("userId");
