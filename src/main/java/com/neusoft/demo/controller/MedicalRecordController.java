@@ -5,10 +5,13 @@ import com.neusoft.demo.dto.AiConfirmDTO;
 import com.neusoft.demo.dto.MedicalRecordDTO;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.utils.JwtUtil;
+import com.neusoft.demo.vo.PatientMedicalRecordVO;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/medical-record")
@@ -70,5 +73,21 @@ public class MedicalRecordController {
     private Long parseDoctorId(HttpServletRequest request) {
         Claims claims = JwtUtil.parseToken(request.getHeader("token"));
         return claims.get("userId", Long.class);
+    }
+
+    /**
+     * P1 患者端：查询我的病历列表
+     * GET /medical-record/my-list
+     */
+    @GetMapping("/my-list")
+    public Result<List<PatientMedicalRecordVO>> myMedicalRecordList(HttpServletRequest request) {
+        // 从Token获取当前患者ID
+        Object userIdObj = request.getAttribute("userId");
+        if (userIdObj == null) {
+            return Result.fail("请先登录");
+        }
+        Long patientId = Long.parseLong(userIdObj.toString());
+        List<PatientMedicalRecordVO> list = medicalRecordService.listPatientMedicalRecord(patientId);
+        return Result.success(list);
     }
 }

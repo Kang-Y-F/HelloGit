@@ -1,14 +1,14 @@
 package com.neusoft.demo.interceptor;
 
 import com.neusoft.demo.utils.JwtUtil;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
-public class JwtInterceptor
-        implements HandlerInterceptor {
+public class JwtInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(
@@ -17,8 +17,7 @@ public class JwtInterceptor
             Object handler
     ) throws Exception {
 
-        String token =
-                request.getHeader("token");
+        String token = request.getHeader("token");
 
         if (token == null || token.isEmpty()) {
 
@@ -39,6 +38,13 @@ public class JwtInterceptor
 
             return false;
         }
+        Claims claims =
+                JwtUtil.parseToken(token);
+
+        request.setAttribute(
+                "userId",
+                claims.get("userId", Long.class)
+        );
 
         return true;
     }

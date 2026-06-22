@@ -3,6 +3,7 @@ package com.neusoft.demo.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.neusoft.demo.entity.RegisterOrder;
 import com.neusoft.demo.vo.QueueItemVO;
+import com.neusoft.demo.vo.RegisterOrderVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
@@ -34,4 +35,6 @@ public interface RegisterOrderMapper extends BaseMapper<RegisterOrder> {
             ORDER BY ro.priority DESC, ro.create_time ASC
             """)
     List<QueueItemVO> selectTodayQueue(Long doctorId);
+
+    RegisterOrderVO getPatientDetail(Long id);
 }

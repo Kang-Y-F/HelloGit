@@ -1,11 +1,12 @@
 package com.neusoft.demo.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDate;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 
 @Data
 @TableName("schedule")
@@ -23,4 +24,6 @@ public class Schedule {
     private Integer maxNum;
 
     private Integer currentNum;
+
+
 }

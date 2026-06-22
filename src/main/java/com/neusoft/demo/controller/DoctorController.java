@@ -10,18 +10,18 @@ import com.neusoft.demo.entity.RegisterOrder;
 import com.neusoft.demo.mapper.DoctorMapper;
 import com.neusoft.demo.mapper.RegisterOrderMapper;
 import com.neusoft.demo.service.DoctorService;
+import com.neusoft.demo.service.ScheduleService;
 import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.vo.LoginVO;
+import com.neusoft.demo.vo.ScheduleVO;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -30,6 +30,9 @@ public class DoctorController {
 
     @Autowired
     private DoctorService doctorService;
+
+    @Autowired
+    private ScheduleService scheduleService;
 
     @Autowired
     private DoctorMapper doctorMapper;
@@ -163,5 +166,44 @@ public class DoctorController {
         if ("status".equals(field))   w.eq(RegisterOrder::getStatus,   Integer.parseInt(value));
         if ("priority".equals(field)) w.eq(RegisterOrder::getPriority, Integer.parseInt(value));
         return registerOrderMapper.selectCount(w);
+    }
+
+    @GetMapping("/{doctorId}/schedule")
+    public Result<List<ScheduleVO>> getSchedule(@PathVariable Long doctorId) {
+
+        return Result.success(
+                scheduleService.getDoctorSchedule(doctorId)
+        );
+    }
+
+    @GetMapping("/listByDept/{deptId}")
+    public Result<?> listByDept(@PathVariable Long deptId) {
+
+        return Result.success(
+                doctorService.listByDept(deptId)
+        );
+    }
+
+    /**
+     * 首页推荐医生（在岗医生 取前6条）
+     */
+    @GetMapping("/recommend")
+    public Result<List<Doctor>> getRecommendDoctor() {
+        List<Doctor> list = doctorService.getRecommendDoctor(6);
+        // 遍历清空密码
+        list
+                .forEach(doc -> doc.setPassword(null));
+        return Result.success(list);
+    }
+
+    /**
+     * 搜索医生（姓名、擅长技能 模糊查询）
+     */
+    @GetMapping("/search")
+    public Result<List<Doctor>> searchDoctor(@RequestParam String keyword) {
+        List<Doctor> list = doctorService.searchDoctor(keyword);
+        list
+                .forEach(doc -> doc.setPassword(null));
+        return Result.success(list);
     }
 }

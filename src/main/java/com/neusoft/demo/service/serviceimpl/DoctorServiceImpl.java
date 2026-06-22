@@ -12,10 +12,12 @@ import com.neusoft.demo.service.DoctorService;
 import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.utils.PasswordUtil;
 import com.neusoft.demo.vo.LoginVO;
+import com.neusoft.demo.vo.DoctorVO;
 import com.neusoft.demo.vo.QueueItemVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -129,5 +131,59 @@ public class DoctorServiceImpl implements DoctorService {
 
         return doctorMapper.selectList(null);
 
+    }
+
+    @Override
+    public List<DoctorVO> listByDept(Long deptId) {
+
+        LambdaQueryWrapper<Doctor> wrapper =
+                new LambdaQueryWrapper<>();
+
+        wrapper.eq(Doctor::getDeptId, deptId);
+        wrapper.eq(Doctor::getStatus, 1);
+
+        List<Doctor> doctorList =
+                doctorMapper.selectList(wrapper);
+
+        List<DoctorVO> voList =
+                new ArrayList<>();
+
+        for (Doctor doctor : doctorList) {
+
+            DoctorVO vo = new DoctorVO();
+
+            vo.setId(doctor.getId());
+            vo.setName(doctor.getName());
+            vo.setTitle(doctor.getTitle());
+            vo.setSkills(doctor.getSkills());
+            vo.setAvatar(doctor.getAvatar());
+
+            voList.add(vo);
+        }
+
+        return voList;
+    }
+
+    @Override
+    public List<Doctor> getRecommendDoctor(Integer limit) {
+        LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
+        // status = 1 正常在岗
+        wrapper
+                .eq(Doctor::getStatus, 1)
+                .last("LIMIT " + limit); // 拼接分页，取前N条
+        return doctorMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<Doctor> searchDoctor(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return List.of(); // 空关键词返回空集合
+        }
+        String likeStr = "%" + keyword + "%";
+        LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Doctor::getStatus, 1) // 仅在岗医生
+                .and(w -> w.like(Doctor::getName, likeStr)
+                        .or().like(Doctor::getSkills, likeStr));
+        return doctorMapper.selectList(wrapper);
     }
 }

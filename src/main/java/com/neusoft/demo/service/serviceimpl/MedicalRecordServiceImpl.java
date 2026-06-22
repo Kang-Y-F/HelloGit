@@ -4,9 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.AiConfirmDTO;
 import com.neusoft.demo.dto.MedicalRecordDTO;
 import com.neusoft.demo.entity.MedicalRecord;
+import com.neusoft.demo.entity.Doctor;
+import com.neusoft.demo.mapper.DoctorMapper;
 import com.neusoft.demo.mapper.MedicalRecordMapper;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.vo.MedicalRecordVO;
+import com.neusoft.demo.vo.PatientMedicalRecordVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -24,7 +29,13 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     private MedicalRecordMapper medicalRecordMapper;
 
     @Autowired
+    private DoctorMapper doctorMapper;
+
+    @Autowired
     private ChatClient chatClient;
+
+    // 日期格式化
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Override
     @Transactional
@@ -134,5 +145,68 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         int end = endTag != null ? text.indexOf(endTag, start) : text.length();
         if (end == -1) end = text.length();
         return text.substring(start, end).trim();
+    }
+
+    // ========== 新增：患者端查询本人病历 ==========
+    @Override
+    public List<PatientMedicalRecordVO> listPatientMedicalRecord(Long patientId) {
+        // 复用组员已写好的Mapper方法
+        List<MedicalRecordVO> originList = medicalRecordMapper.selectByPatientId(patientId);
+        List<PatientMedicalRecordVO> resultList = new ArrayList<>();
+
+        for (MedicalRecordVO origin : originList) {
+            PatientMedicalRecordVO vo = new PatientMedicalRecordVO();
+            // 基础字段赋值
+            vo
+                    .setId(origin.getId());
+            // 就诊日期格式化
+            if (origin.getCreateTime() != null) {
+                vo
+                        .setVisitDate(origin.getCreateTime().format(DATE_FORMAT));
+            }
+            vo
+                    .setDoctorName(origin.getDoctorName());
+
+            // 补充医生职称：根据doctorId查询职称（也可优化联查，临时方案直接查）
+            if (origin.getDoctorId() != null) {
+                Doctor doctor = doctorMapper.selectById(origin.getDoctorId());
+                if (doctor != null) {
+                    vo
+                            .setDoctorTitle(doctor.getTitle());
+                }
+            }
+
+            // 主诉、诊断
+            vo
+                    .setChiefComplaint(origin.getChiefComplaint());
+            // 优先取医生最终诊断，无则使用AI诊断
+            vo
+                    .setDiagnosis(origin.getAiDiagnosis() == null ? "暂无诊断" : origin.getAiDiagnosis());
+
+            // 处方：拼接用药建议
+            vo
+                    .setPrescription(origin.getAiDrugAdvice() == null ? "暂无处方" : origin.getAiDrugAdvice());
+
+            // 检查项目：拆分检查建议为数组
+            List<String> checkList = new ArrayList<>();
+            if (origin.getAiCheckAdvice() != null && !origin.getAiCheckAdvice().isEmpty()) {
+                // 按顿号分割
+                String[] checks = origin.getAiCheckAdvice().split("、");
+                for (String item : checks) {
+                    checkList
+                            .add(item.trim());
+                }
+            }
+            vo
+                    .setCheckItems(checkList);
+
+            // 病历状态：统一为 completed已完成（当前业务病历均为已完成）
+            vo
+                    .setStatus("completed");
+
+            resultList
+                    .add(vo);
+        }
+        return resultList;
     }
 }
