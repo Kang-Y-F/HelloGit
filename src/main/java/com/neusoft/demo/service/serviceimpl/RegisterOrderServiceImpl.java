@@ -42,12 +42,10 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
     }
 
     @Override
-    public List<RegisterOrder> listByPatient(Long patientId) {
-        return registerOrderMapper.selectList(
-                new LambdaQueryWrapper<RegisterOrder>()
-                        .eq(RegisterOrder::getUserId, patientId)
-                        .orderByDesc(RegisterOrder::getCreateTime)
-        );
+    public List<RegisterOrderVO> listByPatient(Long patientId) {
+
+        return registerOrderMapper.listPatientOrders(patientId);
+
     }
 
     @Override

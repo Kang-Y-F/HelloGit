@@ -191,8 +191,7 @@ public class DoctorController {
     public Result<List<Doctor>> getRecommendDoctor() {
         List<Doctor> list = doctorService.getRecommendDoctor(6);
         // 遍历清空密码
-        list
-                .forEach(doc -> doc.setPassword(null));
+        list.forEach(doc -> doc.setPassword(null));
         return Result.success(list);
     }
 

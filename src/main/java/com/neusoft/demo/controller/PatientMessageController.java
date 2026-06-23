@@ -40,4 +40,9 @@ public class PatientMessageController {
         }
         return Result.fail("操作失败，无此消息或无权操作");
     }
+
+    @DeleteMapping("/{msgId}")
+    public Result<?> deleteMessage(@PathVariable Long msgId, @RequestParam Long patientId) {
+        return Result.success(messageService.deleteMessage(msgId, patientId));
+    }
 }

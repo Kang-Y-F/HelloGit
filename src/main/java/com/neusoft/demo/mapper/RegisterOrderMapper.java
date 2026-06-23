@@ -36,5 +36,7 @@ public interface RegisterOrderMapper extends BaseMapper<RegisterOrder> {
             """)
     List<QueueItemVO> selectTodayQueue(Long doctorId);
 
+    List<RegisterOrderVO> listPatientOrders(Long patientId);
+
     RegisterOrderVO getPatientDetail(Long id);
 }

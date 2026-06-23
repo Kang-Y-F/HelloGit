@@ -13,25 +13,51 @@
 
 
         SELECT
-
             ro.id,
+            ro.order_no AS orderNo,
+            ro.price AS fee,
+            ro.status,
 
             p.name AS patientName,
+            d.name AS doctorName,
+            dep.name AS departmentName,
+
+            s.work_date AS visitDate,
+            s.time_slot AS timeSlot
+
+        FROM register_order ro
+
+                 LEFT JOIN pmi_patient p ON ro.user_id = p.id
+                 LEFT JOIN doctor d ON ro.doctor_id = d.id
+                 LEFT JOIN department dep ON d.dept_id = dep.id
+                 LEFT JOIN schedule s ON ro.schedule_id = s.id
+
+        WHERE ro.id = #{id}
+
+
+    </select>
+
+    <select id="listPatientOrders"
+            resultType="com.neusoft.demo.vo.RegisterOrderVO">
+
+
+        SELECT
+
+            ro.id,
+            ro.order_no AS orderNo,
+            ro.price AS fee,
+            ro.status,
 
             d.name AS doctorName,
 
             dep.name AS departmentName,
 
-            ro.create_time AS visitTime,
+            s.work_date AS visitDate,
 
-            ro.status
+            s.time_slot AS timeSlot
 
 
         FROM register_order ro
-
-
-                 LEFT JOIN pmi_patient p
-                           ON ro.user_id = p.id
 
 
                  LEFT JOIN doctor d
@@ -42,7 +68,14 @@
                            ON d.dept_id = dep.id
 
 
-        WHERE ro.id = #{id}
+                 LEFT JOIN schedule s
+                           ON ro.schedule_id = s.id
+
+
+        WHERE ro.user_id = #{patientId}
+
+
+        ORDER BY ro.create_time DESC
 
 
     </select>

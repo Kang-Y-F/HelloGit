@@ -124,6 +124,7 @@ public class AiGuideServiceImpl implements AiGuideService {
         LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
         wrapper
                 .eq(Doctor::getDeptId, deptId)
+                .eq(Doctor::getRole,"doctor")
                 .eq(Doctor::getStatus, 1);
         // 直接查询并返回，无需额外 stream 转换
         return doctorMapper.selectList(wrapper);

@@ -13,61 +13,45 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class ScheduleServiceImpl
-        implements ScheduleService {
+public class ScheduleServiceImpl implements ScheduleService {
 
     @Autowired
     private ScheduleMapper scheduleMapper;
 
     @Override
-    public List<ScheduleVO> getDoctorSchedule(
-            Long doctorId
-    ) {
+    public List<ScheduleVO> getDoctorSchedule(Long doctorId) {
 
-        QueryWrapper<Schedule> wrapper =
-                new QueryWrapper<>();
+        QueryWrapper<Schedule> wrapper = new QueryWrapper<>();
 
         wrapper.eq("doctor_id", doctorId);
 
-        List<Schedule> scheduleList =
-                scheduleMapper.selectList(wrapper);
+        List<Schedule> scheduleList = scheduleMapper.selectList(wrapper);
 
-        List<ScheduleVO> result =
-                new ArrayList<>();
+        List<ScheduleVO> result = new ArrayList<>();
 
         for (Schedule s : scheduleList) {
 
-            ScheduleVO vo =
-                    new ScheduleVO();
+            ScheduleVO vo = new ScheduleVO();
 
             vo.setScheduleId(s.getId());
 
-            vo.setFullDate(
-                    s.getWorkDate().toString()
-            );
+            vo.setFullDate(s.getWorkDate().toString());
 
-            vo.setDate(
-                    s.getWorkDate().getMonthValue()
+            vo.setDate(s.getWorkDate().getMonthValue()
                             + "月"
                             + s.getWorkDate().getDayOfMonth()
                             + "日"
             );
 
-            DayOfWeek day =
-                    s.getWorkDate().getDayOfWeek();
+            DayOfWeek day = s.getWorkDate().getDayOfWeek();
 
             vo.setWeek(convertWeek(day));
 
-            vo.setTime(
-                    s.getTimeSlot()
-            );
+            vo.setTime(s.getTimeSlot());
 
             vo.setFee(20.0);
 
-            vo.setRemaining(
-                    s.getMaxNum()
-                            - s.getCurrentNum()
-            );
+            vo.setRemaining(s.getMaxNum() - s.getCurrentNum());
 
             result.add(vo);
         }
