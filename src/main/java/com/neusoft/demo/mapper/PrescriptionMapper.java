@@ -11,6 +11,7 @@ import org.apache.ibatis.annotations.Select;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface PrescriptionMapper extends BaseMapper<Prescription> {
@@ -54,4 +55,31 @@ public interface PrescriptionMapper extends BaseMapper<Prescription> {
                     """
     )
     List<PatientPrescriptionVO> selectPrescriptionByPatientId(@Param("patientId") Long patientId);
+
+    /** 药师待审核（药师人工审核） */
+    @Select("""
+            SELECT p.*, pat.name AS patientName, doc.name AS doctorName
+            FROM prescription p
+            LEFT JOIN pmi_patient pat ON p.patient_id = pat.id
+            LEFT JOIN doctor doc ON p.doctor_id = doc.id
+            WHERE p.audit_status = 1 OR p.audit_status = 2  -- AI通过或警告
+              AND p.pharmacist_status = 0                   -- 药师还未审核
+            ORDER BY p.create_time DESC
+            LIMIT 100
+            """)
+    List<Map<String, Object>> selectPendingAudit();
+
+    /** 待发药（药师已审核通过 + 已付费 + 未发药） */
+    @Select("""
+            SELECT p.*, pat.name AS patientName, doc.name AS doctorName
+            FROM prescription p
+            LEFT JOIN pmi_patient pat ON p.patient_id = pat.id
+            LEFT JOIN doctor doc ON p.doctor_id = doc.id
+            WHERE p.pharmacist_status = 1
+              AND p.pay_status        = 1
+              AND p.dispense_status   = 0
+            ORDER BY p.create_time ASC
+            LIMIT 100
+            """)
+    List<Map<String, Object>> selectPendingDispense();
 }
