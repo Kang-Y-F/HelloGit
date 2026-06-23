@@ -45,6 +45,12 @@ public class PaymentRecord {
     /** 0待支付 1支付成功 2已退款 */
     private Integer payStatus;
 
+    /**
+     * 缴费类型：1=挂号费  2=检查/检验费
+     * 对应数据库新增字段 bill_type
+     */
+    private Integer billType;
+
     private LocalDateTime payTime;
 
     private LocalDateTime refundTime;

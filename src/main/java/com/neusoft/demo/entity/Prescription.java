@@ -76,4 +76,10 @@ public class Prescription {
     private Integer dispenseStatus;
 
     private LocalDateTime createTime;
+
+    private Long RegisterOrderId;
+
+    private Long MedicalOrderId;
+
+
 }
