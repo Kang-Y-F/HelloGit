@@ -252,4 +252,17 @@ public class LabReportServiceImpl implements LabReportService {
         try { return Double.parseDouble(s.trim()); }
         catch (Exception e) { return 0.0; }
     }
+
+    /**
+     * 查询当前操作员今日录入的检验报告
+     */
+    @Override
+    public List<LabReport> listTodayByOperator(Long operatorId) {
+        return labReportMapper.selectList(
+                new LambdaQueryWrapper<LabReport>()
+                        .eq(LabReport::getOperatorId, operatorId)
+                        .apply("DATE(create_time) = CURDATE()")
+                        .orderByDesc(LabReport::getCreateTime)
+        );
+    }
 }

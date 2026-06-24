@@ -2,6 +2,7 @@ package com.neusoft.demo.controller;
 
 import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.MedicalOrderDTO;
+import com.neusoft.demo.mapper.MedicalOrderMapper;
 import com.neusoft.demo.service.MedicalOrderService;
 import com.neusoft.demo.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
@@ -16,6 +17,9 @@ public class MedicalOrderController {
     @Autowired
     private MedicalOrderService medicalOrderService;
 
+    @Autowired
+    private MedicalOrderMapper medicalOrderMapper;
+
     /** 开医嘱（含处方） */
     @PostMapping("/create")
     public Result<?> create(@RequestBody MedicalOrderDTO dto,
@@ -26,9 +30,13 @@ public class MedicalOrderController {
         return Result.success(orderId);
     }
 
-    /** 查询挂号单下所有医嘱 */
+    /**
+     * 查询挂号单下所有医嘱（联表带项目名称和价格）
+     */
     @GetMapping("/list/{registerOrderId}")
     public Result<?> list(@PathVariable Long registerOrderId) {
-        return Result.success(medicalOrderService.listByRegisterOrder(registerOrderId));
+        return Result.success(
+            medicalOrderMapper.selectByRegisterOrderIdWithItem(registerOrderId)
+        );
     }
 }

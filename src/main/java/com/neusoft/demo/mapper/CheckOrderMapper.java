@@ -6,22 +6,15 @@ import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
-/**
- * CheckOrderMapper
- * 新增方法：selectPendingPayment、updateStatus、selectByRegisterOrderId
- */
 @Mapper
 public interface CheckOrderMapper {
 
-    /** 按患者查所有检查单（原有） */
     @Select("SELECT * FROM check_order WHERE user_id = #{patientId} ORDER BY create_time DESC")
     List<CheckOrder> selectByPatientId(Long patientId);
 
-    /** 单条查询（原有） */
     @Select("SELECT * FROM check_order WHERE id = #{id}")
     CheckOrder selectById(Long id);
 
-    /** 插入（新增） */
     @Insert("""
         INSERT INTO check_order
           (record_id, order_id, user_id, doctor_id, item_id, order_type, status, create_time)
@@ -31,33 +24,19 @@ public interface CheckOrderMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(CheckOrder checkOrder);
 
-    /** 更新状态（新增） */
     @Update("UPDATE check_order SET status = #{status} WHERE id = #{id}")
     int updateStatus(@Param("id") Long id, @Param("status") Integer status);
 
-    /**
-     * 待缴费检查单列表（新增）
-     * 联表：pmi_patient（患者姓名/手机号）、admin（医生姓名）、check_item（项目名）、
-     *       medical_order → register_order（挂号单号）
-     */
+    /** 待缴费检查单（带价格） */
     @Select("""
         <script>
         SELECT
-            co.id,
-            co.record_id        AS recordId,
-            co.order_id         AS orderId,
-            co.user_id          AS userId,
-            p.name              AS patientName,
-            p.phone             AS patientPhone,
-            co.doctor_id        AS doctorId,
-            a.name              AS doctorName,
-            co.item_id          AS itemId,
-            ci.name             AS itemName,
-            co.order_type       AS orderType,
-            co.status,
-            co.create_time      AS createTime,
-            ro.order_no         AS orderNo,
-            ro.id               AS registerOrderId
+            co.id, co.record_id AS recordId, co.order_id AS orderId,
+            co.user_id AS userId, p.name AS patientName, p.phone AS patientPhone,
+            co.doctor_id AS doctorId, a.name AS doctorName,
+            co.item_id AS itemId, ci.name AS itemName, ci.price AS itemPrice,
+            co.order_type AS orderType, co.status, co.create_time AS createTime,
+            ro.order_no AS orderNo, ro.id AS registerOrderId
         FROM check_order co
         LEFT JOIN pmi_patient    p  ON p.id  = co.user_id
         LEFT JOIN admin          a  ON a.id  = co.doctor_id
@@ -65,9 +44,7 @@ public interface CheckOrderMapper {
         LEFT JOIN medical_order  mo ON mo.id = co.order_id
         LEFT JOIN register_order ro ON ro.id = mo.register_order_id
         WHERE co.status = 0
-        <if test="patientId != null">
-            AND co.user_id = #{patientId}
-        </if>
+        <if test="patientId != null"> AND co.user_id = #{patientId} </if>
         <if test="keyword != null and keyword != ''">
             AND (p.name LIKE CONCAT('%', #{keyword}, '%')
               OR p.phone LIKE CONCAT('%', #{keyword}, '%'))
@@ -77,30 +54,17 @@ public interface CheckOrderMapper {
         """)
     List<CheckOrderVO> selectPendingPayment(
             @Param("patientId") Long patientId,
-            @Param("keyword") String keyword
-    );
+            @Param("keyword") String keyword);
 
-    /**
-     * 按挂号单查所有检查单（新增）
-     * 通过 medical_order.register_order_id 关联
-     */
+    /** 按挂号单查检查单（带价格） */
     @Select("""
         SELECT
-            co.id,
-            co.record_id        AS recordId,
-            co.order_id         AS orderId,
-            co.user_id          AS userId,
-            p.name              AS patientName,
-            p.phone             AS patientPhone,
-            co.doctor_id        AS doctorId,
-            a.name              AS doctorName,
-            co.item_id          AS itemId,
-            ci.name             AS itemName,
-            co.order_type       AS orderType,
-            co.status,
-            co.create_time      AS createTime,
-            ro.order_no         AS orderNo,
-            ro.id               AS registerOrderId
+            co.id, co.record_id AS recordId, co.order_id AS orderId,
+            co.user_id AS userId, p.name AS patientName, p.phone AS patientPhone,
+            co.doctor_id AS doctorId, a.name AS doctorName,
+            co.item_id AS itemId, ci.name AS itemName, ci.price AS itemPrice,
+            co.order_type AS orderType, co.status, co.create_time AS createTime,
+            ro.order_no AS orderNo, ro.id AS registerOrderId
         FROM check_order co
         LEFT JOIN pmi_patient    p  ON p.id  = co.user_id
         LEFT JOIN admin          a  ON a.id  = co.doctor_id

@@ -13,28 +13,17 @@ import java.util.List;
 public interface LabReportMapper extends BaseMapper<LabReport> {
 
     /**
-     * 待执行检验单
-     * 条件：check_order.status=1（已缴费/待执行）且 order_type=2（检验）
-     * 联表取患者姓名、医生姓名、挂号单号
+     * 待执行检验单（status=1 + orderType=2），带项目价格
      */
     @Select("""
         <script>
         SELECT
-            co.id,
-            co.record_id        AS recordId,
-            co.order_id         AS orderId,
-            co.user_id          AS userId,
-            p.name              AS patientName,
-            p.phone             AS patientPhone,
-            co.doctor_id        AS doctorId,
-            a.name              AS doctorName,
-            co.item_id          AS itemId,
-            ci.name             AS itemName,
-            co.order_type       AS orderType,
-            co.status,
-            co.create_time      AS createTime,
-            ro.order_no         AS orderNo,
-            ro.id               AS registerOrderId
+            co.id, co.record_id AS recordId, co.order_id AS orderId,
+            co.user_id AS userId, p.name AS patientName, p.phone AS patientPhone,
+            co.doctor_id AS doctorId, a.name AS doctorName,
+            co.item_id AS itemId, ci.name AS itemName, ci.price AS itemPrice,
+            co.order_type AS orderType, co.status, co.create_time AS createTime,
+            ro.order_no AS orderNo, ro.id AS registerOrderId
         FROM check_order co
         LEFT JOIN pmi_patient    p  ON p.id  = co.user_id
         LEFT JOIN admin          a  ON a.id  = co.doctor_id
