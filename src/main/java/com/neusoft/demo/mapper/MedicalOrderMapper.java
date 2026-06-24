@@ -1,10 +1,10 @@
 package com.neusoft.demo.mapper;
 
 import com.neusoft.demo.entity.MedicalOrder;
+import com.neusoft.demo.vo.MedicalOrderVO;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
-import java.util.Map;
 
 @Mapper
 public interface MedicalOrderMapper {
@@ -19,28 +19,41 @@ public interface MedicalOrderMapper {
     int insert(MedicalOrder order);
 
     /**
-     * 查询挂号单下所有医嘱（联表查 check_order → check_item 取项目名和价格）
-     *
-     * 返回字段在原 MedicalOrder 基础上额外带：
-     *   itemName  — 检查/检验项目名（如"糖化血红蛋白"）
-     *   itemPrice — 项目价格
-     *   itemId    — 项目ID
+     * 查询挂号单下所有医嘱，联表带项目名和价格
+     * 用 @Results 显式映射下划线到驼峰
      */
     @Select("""
         SELECT
-            mo.*,
-            ci.name   AS itemName,
-            ci.price  AS itemPrice,
-            co.item_id AS itemId
+            mo.id,
+            mo.register_order_id,
+            mo.patient_id,
+            mo.doctor_id,
+            mo.order_type,
+            mo.exec_status,
+            mo.create_time,
+            ci.name   AS item_name,
+            ci.price  AS item_price,
+            co.item_id AS item_id
         FROM medical_order mo
         LEFT JOIN check_order co ON co.order_id = mo.id
         LEFT JOIN check_item  ci ON ci.id = co.item_id
         WHERE mo.register_order_id = #{registerOrderId}
         ORDER BY mo.create_time
         """)
-    List<Map<String, Object>> selectByRegisterOrderIdWithItem(Long registerOrderId);
+    @Results({
+        @Result(column = "id",                property = "id"),
+        @Result(column = "register_order_id", property = "registerOrderId"),
+        @Result(column = "patient_id",        property = "patientId"),
+        @Result(column = "doctor_id",         property = "doctorId"),
+        @Result(column = "order_type",        property = "orderType"),
+        @Result(column = "exec_status",       property = "execStatus"),
+        @Result(column = "create_time",       property = "createTime"),
+        @Result(column = "item_name",         property = "itemName"),
+        @Result(column = "item_price",        property = "itemPrice"),
+        @Result(column = "item_id",           property = "itemId")
+    })
+    List<MedicalOrderVO> selectByRegisterOrderIdWithItem(Long registerOrderId);
 
-    /** 原有：不联表的简单查询（保留兼容） */
     @Select("SELECT * FROM medical_order WHERE register_order_id = #{registerOrderId} ORDER BY create_time")
     List<MedicalOrder> selectByRegisterOrderId(Long registerOrderId);
 

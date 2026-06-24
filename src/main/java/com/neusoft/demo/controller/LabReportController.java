@@ -3,6 +3,7 @@ package com.neusoft.demo.controller;
 import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.LabReportDTO;
 import com.neusoft.demo.entity.LabReport;
+import com.neusoft.demo.mapper.LabReportMapper;
 import com.neusoft.demo.service.LabReportService;
 import com.neusoft.demo.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
@@ -10,15 +11,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * 检验报告 Controller
- */
 @RestController
 @RequestMapping("/lab-report")
 public class LabReportController {
 
-    @Autowired
-    private LabReportService labReportService;
+    @Autowired private LabReportService labReportService;
+    @Autowired private LabReportMapper  labReportMapper;
 
     /** 待执行检验单列表 */
     @GetMapping("/pending")
@@ -69,13 +67,13 @@ public class LabReportController {
     }
 
     /**
-     * 今日已录入报告（当前操作员）
-     * 供检验录入页面加载时展示，刷新不丢失
+     * 今日已录入报告（带患者姓名）
+     * 直接调 Mapper 联表返回 Map，前端拿 patient_name 字段展示
      */
     @GetMapping("/today")
     public Result<?> todayReports(HttpServletRequest request) {
         Long operatorId = parseUserId(request);
-        return Result.success(labReportService.listTodayByOperator(operatorId));
+        return Result.success(labReportMapper.selectTodayWithPatient(operatorId));
     }
 
     private Long parseUserId(HttpServletRequest request) {

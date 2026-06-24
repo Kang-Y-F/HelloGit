@@ -28,45 +28,39 @@ public class ReportController {
         return Result.success(checkReportMapper.selectByPatientId(patientId));
     }
 
-    /** 患者所有检验报告 */
+    /**
+     * 患者所有检验报告
+     * 修复：用 patient_id 查询（而不是 order_id）
+     */
     @GetMapping("/lab/{patientId}")
     public Result<?> labReports(@PathVariable Long patientId) {
         return Result.success(
                 labReportMapper.selectList(
                         new LambdaQueryWrapper<LabReport>()
-                                .eq(LabReport::getOrderId, patientId)
+                                .eq(LabReport::getPatientId, patientId)
                                 .orderByDesc(LabReport::getCreateTime)
                 )
         );
     }
 
-    /**
-     * 查询所有有CT报告的患者列表（CT影像分析列表页使用）
-     * 返回每个患者的报告数量、最新报告时间、最大伪影像素数
-     */
+    /** 查询所有有CT报告的患者列表 */
     @GetMapping("/ct/patients")
     public Result<?> ctPatients() {
-        // 查所有CT报告
         List<CheckReport> all = checkReportMapper.selectList(
                 new LambdaQueryWrapper<CheckReport>()
                         .orderByDesc(CheckReport::getCreateTime)
         );
 
-        // 按患者ID分组
         Map<Long, List<CheckReport>> grouped = all.stream()
                 .filter(r -> r.getPatientId() != null)
                 .collect(Collectors.groupingBy(CheckReport::getPatientId));
 
-        // 查患者姓名
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<Long, List<CheckReport>> entry : grouped.entrySet()) {
             Long patientId = entry.getKey();
             List<CheckReport> reports = entry.getValue();
-
-            // 查患者信息
             PmiPatient patient = pmiPatientMapper.selectById(patientId);
 
-            // 最大伪影像素（从 artifactResult JSON 里取）
             long maxPixels = 0;
             for (CheckReport r : reports) {
                 if (r.getArtifactResult() != null) {
@@ -79,7 +73,6 @@ public class ReportController {
                 }
             }
 
-            // 最新报告时间
             String lastDate = reports.isEmpty() ? "" :
                     reports.get(0).getCreateTime() != null ?
                             reports.get(0).getCreateTime().toString().substring(0, 16).replace("T", " ") : "";
@@ -93,15 +86,11 @@ public class ReportController {
             result.add(item);
         }
 
-        // 按最新报告时间倒序
         result.sort((a, b) -> String.valueOf(b.get("lastDate")).compareTo(String.valueOf(a.get("lastDate"))));
-
         return Result.success(result);
     }
 
-    /**
-     * 删除患者所有CT影像报告（聚类页删除患者时同步调用）
-     */
+    /** 删除患者所有CT影像报告 */
     @DeleteMapping("/ct/patient/{patientId}")
     public Result<?> deleteCtReports(@PathVariable Long patientId) {
         int rows = checkReportMapper.delete(

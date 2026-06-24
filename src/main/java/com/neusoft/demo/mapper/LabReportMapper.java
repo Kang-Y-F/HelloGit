@@ -8,13 +8,12 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface LabReportMapper extends BaseMapper<LabReport> {
 
-    /**
-     * 待执行检验单（status=1 + orderType=2），带项目价格
-     */
+    /** 待执行检验单（status=1 + orderType=2），带价格 */
     @Select("""
         <script>
         SELECT
@@ -30,8 +29,7 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
         LEFT JOIN check_item     ci ON ci.id = co.item_id
         LEFT JOIN medical_order  mo ON mo.id = co.order_id
         LEFT JOIN register_order ro ON ro.id = mo.register_order_id
-        WHERE co.status = 1
-          AND co.order_type = 2
+        WHERE co.status = 1 AND co.order_type = 2
         <if test="keyword != null and keyword != ''">
             AND (p.name LIKE CONCAT('%', #{keyword}, '%')
               OR p.phone LIKE CONCAT('%', #{keyword}, '%'))
@@ -40,4 +38,20 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
         </script>
         """)
     List<CheckOrderVO> selectPendingLabOrders(@Param("keyword") String keyword);
+
+    /**
+     * 今日已录入检验报告（带患者姓名）
+     * 联表 pmi_patient 取患者姓名
+     */
+    @Select("""
+        SELECT
+            lr.*,
+            p.name AS patient_name
+        FROM lab_report lr
+        LEFT JOIN pmi_patient p ON p.id = lr.patient_id
+        WHERE lr.operator_id = #{operatorId}
+          AND DATE(lr.create_time) = CURDATE()
+        ORDER BY lr.create_time DESC
+        """)
+    List<Map<String, Object>> selectTodayWithPatient(@Param("operatorId") Long operatorId);
 }

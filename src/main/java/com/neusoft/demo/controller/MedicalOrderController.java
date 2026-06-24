@@ -22,17 +22,14 @@ public class MedicalOrderController {
 
     /** 开医嘱（含处方） */
     @PostMapping("/create")
-    public Result<?> create(@RequestBody MedicalOrderDTO dto,
-                            HttpServletRequest request) {
+    public Result<?> create(@RequestBody MedicalOrderDTO dto, HttpServletRequest request) {
         Claims claims = JwtUtil.parseToken(request.getHeader("token"));
         Long doctorId = claims.get("userId", Long.class);
         Long orderId = medicalOrderService.create(doctorId, dto);
         return Result.success(orderId);
     }
 
-    /**
-     * 查询挂号单下所有医嘱（联表带项目名称和价格）
-     */
+    /** 查询挂号单下所有医嘱（带项目名和价格） */
     @GetMapping("/list/{registerOrderId}")
     public Result<?> list(@PathVariable Long registerOrderId) {
         return Result.success(
