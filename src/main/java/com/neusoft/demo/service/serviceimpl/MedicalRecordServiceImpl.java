@@ -3,9 +3,11 @@ package com.neusoft.demo.service.serviceimpl;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.AiConfirmDTO;
 import com.neusoft.demo.dto.MedicalRecordDTO;
+import com.neusoft.demo.entity.AiOperationLog;
 import com.neusoft.demo.entity.MedicalRecord;
 import com.neusoft.demo.entity.Doctor;
 import com.neusoft.demo.mapper.DoctorMapper;
+import com.neusoft.demo.mapper.AiOperationLogMapper;
 import com.neusoft.demo.mapper.MedicalRecordMapper;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.vo.MedicalRecordVO;
@@ -25,14 +27,13 @@ import java.util.List;
 @Service
 public class MedicalRecordServiceImpl implements MedicalRecordService {
 
-    @Autowired
-    private MedicalRecordMapper medicalRecordMapper;
+    @Autowired private MedicalRecordMapper    medicalRecordMapper;
+    @Autowired private AiOperationLogMapper   aiLogMapper;
+    @Autowired private ChatClient             chatClient;
 
     @Autowired
     private DoctorMapper doctorMapper;
 
-    @Autowired
-    private ChatClient chatClient;
 
     // 日期格式化
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -91,8 +92,8 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                 （填写建议用药，多项用顿号分隔，暂无则填"暂无"）
                 """,
                 vo.getChiefComplaint(),
-                vo.getPresentHistory(),
-                vo.getCheckResult() == null ? "暂无" : vo.getCheckResult()
+                vo.getPresentHistory() == null ? "暂无" : vo.getPresentHistory(),
+                vo.getCheckResult()    == null ? "暂无" : vo.getCheckResult()
         );
 
         String aiResponse;
@@ -110,11 +111,14 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         medicalRecordMapper.update(null,
                 new LambdaUpdateWrapper<MedicalRecord>()
                         .eq(MedicalRecord::getId, recordId)
-                        .set(MedicalRecord::getAiDiagnosis,   aiDiagnosis)
-                        .set(MedicalRecord::getAiCheckAdvice, aiCheckAdvice)
-                        .set(MedicalRecord::getAiDrugAdvice,  aiDrugAdvice)
+                        .set(MedicalRecord::getAiDiagnosis,    aiDiagnosis)
+                        .set(MedicalRecord::getAiCheckAdvice,  aiCheckAdvice)
+                        .set(MedicalRecord::getAiDrugAdvice,   aiDrugAdvice)
                         .set(MedicalRecord::getAiConfirmStatus, 0)
         );
+
+        // 写溯源日志：0=查看（AI建议已生成）
+        writeLog(recordId, aiResponse, null, 0);
 
         vo.setAiDiagnosis(aiDiagnosis);
         vo.setAiCheckAdvice(aiCheckAdvice);
@@ -126,6 +130,11 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Override
     @Transactional
     public boolean confirmAi(Long recordId, AiConfirmDTO dto) {
+        // 查原始AI内容
+        MedicalRecordVO old = getDetail(recordId);
+        String aiOriginal = String.format("诊断：%s | 检查：%s | 用药：%s",
+                old.getAiDiagnosis(), old.getAiCheckAdvice(), old.getAiDrugAdvice());
+
         LambdaUpdateWrapper<MedicalRecord> wrapper =
                 new LambdaUpdateWrapper<MedicalRecord>()
                         .eq(MedicalRecord::getId, recordId)
@@ -135,7 +144,30 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         if (dto.getAiCheckAdvice() != null) wrapper.set(MedicalRecord::getAiCheckAdvice, dto.getAiCheckAdvice());
         if (dto.getAiDrugAdvice()  != null) wrapper.set(MedicalRecord::getAiDrugAdvice,  dto.getAiDrugAdvice());
 
-        return medicalRecordMapper.update(null, wrapper) > 0;
+        boolean ok = medicalRecordMapper.update(null, wrapper) > 0;
+
+        if (ok) {
+            // 写溯源日志
+            String doctorModify = null;
+            if (dto.getConfirmStatus() == 2) {
+                doctorModify = String.format("诊断：%s | 检查：%s | 用药：%s",
+                        dto.getDiagnosis(), dto.getAiCheckAdvice(), dto.getAiDrugAdvice());
+            }
+            writeLog(recordId, aiOriginal, doctorModify, dto.getConfirmStatus());
+        }
+        return ok;
+    }
+
+    // ── 工具 ──────────────────────────────────────────────────────
+
+    private void writeLog(Long recordId, String aiOriginal, String doctorModify, Integer operateType) {
+        AiOperationLog log = new AiOperationLog();
+        log.setRecordId(recordId);
+        log.setAiOriginal(aiOriginal);
+        log.setDoctorModify(doctorModify);
+        log.setOperateType(operateType);
+        log.setOperateTime(LocalDateTime.now());
+        aiLogMapper.insert(log);
     }
 
     private String extractSection(String text, String startTag, String endTag) {

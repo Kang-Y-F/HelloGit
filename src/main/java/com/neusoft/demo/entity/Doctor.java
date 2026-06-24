@@ -24,9 +24,10 @@ public class Doctor {
 
     private String username;
 
+    /** 角色：doctor / registrar / pharmacist / admin */
+    private String role;
+
     private String password;
 
     private Integer status;
-
-    private String role;
 }

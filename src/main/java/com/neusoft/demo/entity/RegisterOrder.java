@@ -32,4 +32,8 @@ public class RegisterOrder {
     private Integer priority;
 
     private LocalDateTime createTime;
+
+    private Integer payStatus;       // 0未支付 1已支付 2已退款
+    private Integer payMethod;       // 1现金 2扫码 3医保 4银行卡
+    private LocalDateTime payTime;
 }

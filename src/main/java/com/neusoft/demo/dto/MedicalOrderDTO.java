@@ -1,7 +1,6 @@
 package com.neusoft.demo.dto;
 
 import lombok.Data;
-
 import java.util.List;
 
 /**
@@ -10,12 +9,23 @@ import java.util.List;
 @Data
 public class MedicalOrderDTO {
 
+    /** 挂号单ID */
     private Long registerOrderId;
 
+    /** 病历ID（开检查/检验医嘱时必填） */
+    private Long recordId;
+
+    /** 患者ID */
     private Long patientId;
 
-    /** 1检查 2检验 3用药 */
+    /** 医嘱类型：1检查 2检验 3用药 */
     private Integer orderType;
+
+    /**
+     * 检查/检验项目ID（orderType=1或2时必填）
+     * 对应 check_item.id，包含项目名称和价格
+     */
+    private Long itemId;
 
     /** 用药医嘱时附带处方列表 */
     private List<PrescriptionItemDTO> prescriptions;

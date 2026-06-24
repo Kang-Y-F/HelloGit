@@ -34,6 +34,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/user/login",
                         "/user/register",
                         "/doctor/login",
+                        "/health",          // ← 加这行
+                        "/report/ct/**",    // ← 加这行
+                        "/report/lab/**",    // ← 加这行
                         "/admin/login",
                         "/admin/add",
                         "/error",

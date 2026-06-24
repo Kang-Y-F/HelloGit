@@ -58,10 +58,19 @@ public class DoctorServiceImpl implements DoctorService {
             return null;
         }
 
-        String token = JwtUtil.createToken(doctor.getId(), "DOCTOR");
+        String role = doctor.getRole() != null ? doctor.getRole() : "doctor";
+        String token = JwtUtil.createToken(doctor.getId(), role);
 
-        return new LoginVO(doctor.getId(), doctor.getName(), "DOCTOR", token);
+        LoginVO vo = new LoginVO();
+        vo.setId(doctor.getId());
+        vo.setName(doctor.getName());
+        vo.setRole(role);
+        vo.setToken(token);
+        vo.setTitle(doctor.getTitle());
+        vo.setUsername(doctor.getUsername());
+        return vo;
     }
+
     private String md5Hex(String input) {
         try {
             var md = java.security.MessageDigest.getInstance("MD5");
