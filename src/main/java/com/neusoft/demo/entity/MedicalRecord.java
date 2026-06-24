@@ -36,4 +36,7 @@ public class MedicalRecord {
     private Integer aiConfirmStatus;
 
     private LocalDateTime createTime;
+
+    /** 关联挂号单ID */
+    private Long registerOrderId;
 }

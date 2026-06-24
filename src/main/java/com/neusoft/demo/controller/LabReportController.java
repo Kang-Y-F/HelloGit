@@ -94,5 +94,15 @@ public class LabReportController {
         return claims.get("userId", Long.class);
     }
 
+    /**
+     * 单条检验报告详情（含 report_content 里的 AI 解读）
+     */
+    @GetMapping("/detail/{id}")
+    public Result<?> detail(@PathVariable Long id) {
+        LabReport report = labReportMapper.selectById(id);
+        if (report == null) return Result.fail("报告不存在");
+        return Result.success(report);
+    }
+
 
 }

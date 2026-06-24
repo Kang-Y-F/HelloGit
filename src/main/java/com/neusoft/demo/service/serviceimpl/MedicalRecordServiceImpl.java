@@ -1,14 +1,11 @@
 package com.neusoft.demo.service.serviceimpl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.AiConfirmDTO;
 import com.neusoft.demo.dto.MedicalRecordDTO;
-import com.neusoft.demo.entity.AiOperationLog;
-import com.neusoft.demo.entity.MedicalRecord;
-import com.neusoft.demo.entity.Doctor;
-import com.neusoft.demo.mapper.DoctorMapper;
-import com.neusoft.demo.mapper.AiOperationLogMapper;
-import com.neusoft.demo.mapper.MedicalRecordMapper;
+import com.neusoft.demo.entity.*;
+import com.neusoft.demo.mapper.*;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.vo.MedicalRecordVO;
 import com.neusoft.demo.vo.PatientMedicalRecordVO;
@@ -30,7 +27,10 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Autowired private MedicalRecordMapper    medicalRecordMapper;
     @Autowired private AiOperationLogMapper   aiLogMapper;
     @Autowired private ChatClient             chatClient;
-
+    @Autowired private CheckReportMapper checkReportMapper;
+    @Autowired private LabReportMapper labReportMapper;
+    @Autowired private MedicalOrderMapper medicalOrderMapper;
+    @Autowired private CheckOrderMapper checkOrderMapper;
     @Autowired
     private DoctorMapper doctorMapper;
 
@@ -43,6 +43,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     public Long create(Long doctorId, MedicalRecordDTO dto) {
         MedicalRecord record = new MedicalRecord();
         record.setUserId(dto.getUserId());
+        record.setRegisterOrderId(dto.getRegisterOrderId());
         record.setDoctorId(doctorId);
         record.setChiefComplaint(dto.getChiefComplaint());
         record.setPresentHistory(dto.getPresentHistory());
@@ -63,12 +64,16 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
 
     @Override
     public List<MedicalRecordVO> listByPatient(Long patientId) {
-        return medicalRecordMapper.selectByPatientId(patientId);
+        List<MedicalRecordVO> voList = medicalRecordMapper.selectByPatientId(patientId);
+        enrichWithReports(voList);
+        return voList;
     }
 
     @Override
     public List<MedicalRecordVO> listByDoctor(Long doctorId, String keyword) {
-        return medicalRecordMapper.selectByDoctorId(doctorId, keyword);
+        List<MedicalRecordVO> voList = medicalRecordMapper.selectByDoctorId(doctorId, keyword);
+        enrichWithReports(voList);
+        return voList;
     }
 
     @Override
@@ -241,4 +246,73 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         }
         return resultList;
     }
+
+    /**
+     * 为病历列表补充本次就诊的检查/检验摘要
+     */
+    private void enrichWithReports(List<MedicalRecordVO> voList) {
+        for (MedicalRecordVO vo : voList) {
+            if (vo.getRegisterOrderId() == null) continue;
+
+            Long regId = vo.getRegisterOrderId();
+
+            // 1. 查本次挂号单下的所有医嘱
+            List<MedicalOrder> orders = medicalOrderMapper.selectByRegisterOrderId(regId);
+
+            List<MedicalRecordVO.CheckSummary> checks = new ArrayList<>();
+            List<MedicalRecordVO.LabSummary> labs = new ArrayList<>();
+
+            for (MedicalOrder mo : orders) {
+                if (mo.getOrderType() == 1) {
+                    // 检查类 → 查 check_report
+                    List<CheckReport> crs = checkReportMapper.selectList(
+                            new LambdaQueryWrapper<CheckReport>()
+                                    .eq(CheckReport::getOrderId, mo.getId())
+                    );
+                    for (CheckReport cr : crs) {
+                        MedicalRecordVO.CheckSummary cs = new MedicalRecordVO.CheckSummary();
+                        cs.setId(cr.getId());
+                        cs.setImgType(cr.getImgType());
+                        cs.setReportText(cr.getReportText());
+                        cs.setAiConfirmStatus(cr.getAiConfirmStatus());
+                        cs.setDoctorConfirmedText(cr.getDoctorConfirmedText());
+                        cs.setAiAnalysis(cr.getAiAnalysis());
+                        cs.setImageUrl(cr.getImageUrl());
+                        cs.setCtUrl(cr.getCtUrl());
+                        cs.setArtifactResult(cr.getArtifactResult());
+                        cs.setPatientId(cr.getPatientId());
+                        checks.add(cs);
+                    }
+                }
+
+                if (mo.getOrderType() == 1 || mo.getOrderType() == 2) {
+                    // 检查/检验类 → 先找 check_order，再查 lab_report
+                    List<CheckOrder> cos = checkOrderMapper.selectByOrderId(mo.getId());
+                    for (CheckOrder co : cos) {
+                        if (co.getOrderType() == 2) {
+                            // 检验类 → 查 lab_report
+                            List<LabReport> lrs = labReportMapper.selectList(
+                                    new LambdaQueryWrapper<LabReport>()
+                                            .eq(LabReport::getOrderId, co.getId())
+                            );
+                            for (LabReport lr : lrs) {
+                                MedicalRecordVO.LabSummary ls = new MedicalRecordVO.LabSummary();
+                                ls.setId(lr.getId());
+                                ls.setItemName(lr.getItemName());
+                                ls.setTestValue(lr.getTestValue());
+                                ls.setReferenceRange(lr.getReferenceRange());
+                                ls.setAbnormalFlag(lr.getAbnormalFlag());
+                                ls.setAuditStatus(lr.getAuditStatus());
+                                labs.add(ls);
+                            }
+                        }
+                    }
+                }
+            }
+
+            vo.setCheckReports(checks);
+            vo.setLabReports(labs);
+        }
+    }
+
 }

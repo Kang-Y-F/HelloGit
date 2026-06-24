@@ -75,4 +75,8 @@ public interface CheckOrderMapper {
         ORDER BY co.create_time DESC
         """)
     List<CheckOrderVO> selectByRegisterOrderId(Long registerOrderId);
+
+    // CheckOrderMapper.java 新增：
+    @Select("SELECT * FROM check_order WHERE order_id = #{orderId}")
+    List<CheckOrder> selectByOrderId(Long orderId);
 }
