@@ -84,7 +84,7 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         // 4. 收集检验报告
         List<LabReport> labs = labReportMapper.selectList(
                 new LambdaQueryWrapper<LabReport>()
-                        .eq(LabReport::getOrderId, report.getPatientId())
+                        .eq(LabReport::getPatientId, report.getPatientId())
                         .orderByDesc(LabReport::getCreateTime)
                         .last("LIMIT 5")
         );
