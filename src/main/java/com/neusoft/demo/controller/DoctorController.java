@@ -171,17 +171,13 @@ public class DoctorController {
     @GetMapping("/{doctorId}/schedule")
     public Result<List<ScheduleVO>> getSchedule(@PathVariable Long doctorId) {
 
-        return Result.success(
-                scheduleService.getDoctorSchedule(doctorId)
-        );
+        return Result.success(scheduleService.getDoctorSchedule(doctorId));
     }
 
     @GetMapping("/listByDept/{deptId}")
     public Result<?> listByDept(@PathVariable Long deptId) {
 
-        return Result.success(
-                doctorService.listByDept(deptId)
-        );
+        return Result.success(doctorService.listByDept(deptId));
     }
 
     /**
@@ -201,8 +197,7 @@ public class DoctorController {
     @GetMapping("/search")
     public Result<List<Doctor>> searchDoctor(@RequestParam String keyword) {
         List<Doctor> list = doctorService.searchDoctor(keyword);
-        list
-                .forEach(doc -> doc.setPassword(null));
+        list.forEach(doc -> doc.setPassword(null));
         return Result.success(list);
     }
 }
