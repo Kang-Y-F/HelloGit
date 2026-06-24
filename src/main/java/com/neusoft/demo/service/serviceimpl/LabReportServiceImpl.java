@@ -265,4 +265,17 @@ public class LabReportServiceImpl implements LabReportService {
                         .orderByDesc(LabReport::getCreateTime)
         );
     }
+
+    @Override
+    public boolean confirmWithEdit(Long reportId, Integer auditStatus, String editedContent) {
+        LabReport report = labReportMapper.selectById(reportId);
+        if (report == null) return false;
+
+        report.setAuditStatus(auditStatus);
+        if (editedContent != null && !editedContent.isBlank()) {
+            // 把修改后的内容写入 report_content（覆盖AI原始解读）
+            report.setReportContent("{\"desc\":\"" + editedContent.replace("\"", "'").replace("\n", " ") + "\"}");
+        }
+        return labReportMapper.updateById(report) > 0;
+    }
 }

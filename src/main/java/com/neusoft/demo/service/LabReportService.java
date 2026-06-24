@@ -23,4 +23,8 @@ public interface LabReportService {
 
     /** 查询当前操作员今日录入的检验报告 */
     List<LabReport> listTodayByOperator(Long operatorId);
+
+    /** 修改后确认（auditStatus=3 + 写入修改内容） */
+    boolean confirmWithEdit(Long reportId, Integer auditStatus, String editedContent);
+
 }

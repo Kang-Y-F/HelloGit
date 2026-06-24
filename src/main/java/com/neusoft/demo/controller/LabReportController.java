@@ -1,6 +1,7 @@
 package com.neusoft.demo.controller;
 
 import com.neusoft.demo.common.Result;
+import com.neusoft.demo.dto.LabReportConfirmDTO;
 import com.neusoft.demo.dto.LabReportDTO;
 import com.neusoft.demo.entity.LabReport;
 import com.neusoft.demo.mapper.LabReportMapper;
@@ -42,7 +43,19 @@ public class LabReportController {
         boolean ok = labReportService.auditReport(id, status);
         return ok ? Result.success("操作成功") : Result.fail("操作失败");
     }
-
+    /**
+     * 修改后确认检验报告
+     * auditStatus=3，同时把修改后的内容写入 report_content
+     */
+    @PutMapping("/{id}/confirm")
+    public Result<?> confirm(@PathVariable Long id, @RequestBody LabReportConfirmDTO dto) {
+        try {
+            boolean ok = labReportService.confirmWithEdit(id, dto.getAuditStatus(), dto.getEditedContent());
+            return ok ? Result.success("操作成功") : Result.fail("操作失败");
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
     /** 按患者查检验报告 */
     @GetMapping("/patient/{patientId}")
     public Result<?> listByPatient(@PathVariable Long patientId) {
@@ -80,4 +93,6 @@ public class LabReportController {
         Claims claims = JwtUtil.parseToken(request.getHeader("token"));
         return claims.get("userId", Long.class);
     }
+
+
 }
