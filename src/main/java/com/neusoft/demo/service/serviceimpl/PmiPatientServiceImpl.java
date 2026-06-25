@@ -15,6 +15,8 @@ import com.neusoft.demo.vo.PatientInfoVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class PmiPatientServiceImpl implements PmiPatientService {
 
@@ -102,5 +104,10 @@ public class PmiPatientServiceImpl implements PmiPatientService {
         // mybatis-plus update 返回受影响行数
         int rows = pmiPatientMapper.update(null, wrapper);
         return rows > 0;
+    }
+
+    @Override
+    public List<PmiPatient> list() {
+        return pmiPatientMapper.selectList(null);
     }
 }

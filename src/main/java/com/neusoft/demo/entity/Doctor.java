@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-@Data
 @TableName("doctor")
+@Data
 public class Doctor {
 
     @TableId(type = IdType.AUTO)
@@ -30,4 +30,6 @@ public class Doctor {
     private String password;
 
     private Integer status;
+
+    private Integer auditStatus;
 }

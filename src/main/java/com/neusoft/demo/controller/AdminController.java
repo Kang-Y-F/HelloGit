@@ -6,10 +6,7 @@ import com.neusoft.demo.dto.LoginDTO;
 import com.neusoft.demo.service.AdminService;
 import com.neusoft.demo.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/admin")
@@ -18,6 +15,7 @@ public class AdminController {
     @Autowired
     private AdminService adminService;
 
+    // ===================== 基础功能模块 =====================
     @PostMapping("/login")
     public Result<LoginVO> login(
             @RequestBody LoginDTO loginDTO){
@@ -40,4 +38,6 @@ public class AdminController {
 
         return Result.success("新增管理员成功");
     }
+
+
 }

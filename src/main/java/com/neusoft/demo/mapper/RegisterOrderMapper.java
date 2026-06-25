@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface RegisterOrderMapper extends BaseMapper<RegisterOrder> {
@@ -36,5 +37,11 @@ public interface RegisterOrderMapper extends BaseMapper<RegisterOrder> {
             """)
     List<QueueItemVO> selectTodayQueue(Long doctorId);
 
+    List<RegisterOrderVO> listPatientOrders(Long patientId);
+
     RegisterOrderVO getPatientDetail(Long id);
+
+    List<Map<String, Object>> deptRank();
+
+    List<Map<String, Object>> doctorLoad();
 }

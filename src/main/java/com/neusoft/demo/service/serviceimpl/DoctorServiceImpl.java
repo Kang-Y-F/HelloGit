@@ -1,6 +1,7 @@
 package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.DoctorAddDTO;
 import com.neusoft.demo.dto.LoginDTO;
@@ -137,25 +138,25 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     public List<Doctor> list() {
+        LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Doctor::getRole, "doctor");
 
-        return doctorMapper.selectList(null);
+        return doctorMapper.selectList(wrapper);
 
     }
 
     @Override
     public List<DoctorVO> listByDept(Long deptId) {
 
-        LambdaQueryWrapper<Doctor> wrapper =
-                new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
 
         wrapper.eq(Doctor::getDeptId, deptId);
         wrapper.eq(Doctor::getStatus, 1);
+        wrapper.eq(Doctor::getRole,"doctor");
 
-        List<Doctor> doctorList =
-                doctorMapper.selectList(wrapper);
+        List<Doctor> doctorList = doctorMapper.selectList(wrapper);
 
-        List<DoctorVO> voList =
-                new ArrayList<>();
+        List<DoctorVO> voList = new ArrayList<>();
 
         for (Doctor doctor : doctorList) {
 
@@ -179,6 +180,7 @@ public class DoctorServiceImpl implements DoctorService {
         // status = 1 正常在岗
         wrapper
                 .eq(Doctor::getStatus, 1)
+                .eq(Doctor::getRole,"doctor")
                 .last("LIMIT " + limit); // 拼接分页，取前N条
         return doctorMapper.selectList(wrapper);
     }
@@ -190,9 +192,48 @@ public class DoctorServiceImpl implements DoctorService {
         }
         String likeStr = "%" + keyword + "%";
         LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Doctor::getStatus, 1) // 仅在岗医生
+        wrapper.eq(Doctor::getStatus, 1)// 仅在岗医生
+                .eq(Doctor::getRole,"doctor")
                 .and(w -> w.like(Doctor::getName, likeStr)
                         .or().like(Doctor::getSkills, likeStr));
         return doctorMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<Doctor> list(Integer auditStatus) {
+        QueryWrapper<Doctor> wrapper = new QueryWrapper<>();
+
+        if (auditStatus != null) {
+            wrapper.eq("audit_status", auditStatus);
+        }
+
+        return doctorMapper.selectList(wrapper);
+    }
+
+    @Override
+    public void auditDoctor(Long id, Integer auditStatus) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setAuditStatus(auditStatus);
+
+        doctorMapper.updateById(doctor);
+    }
+
+    @Override
+    public void updateStatus(Long id, Integer status) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setStatus(status);
+
+        doctorMapper.updateById(doctor);
+    }
+
+    @Override
+    public void updateRole(Long id, String role) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setRole(role);
+
+        doctorMapper.updateById(doctor);
     }
 }

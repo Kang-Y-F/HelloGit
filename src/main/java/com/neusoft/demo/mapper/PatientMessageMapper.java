@@ -20,6 +20,7 @@ public interface PatientMessageMapper extends BaseMapper<PatientMessage> {
             DATE_FORMAT(create_time, '%Y-%m-%d %H:%m') AS createTime
         FROM patient_message
         WHERE patient_id = #{patientId}
+        AND read_status != 2
         ORDER BY create_time DESC
         """)
     List<PatientMessageVO> listByPatientId(@Param("patientId") Long patientId);

@@ -37,4 +37,16 @@ public class PatientMessageServiceImpl implements PatientMessageService {
         message.setReadStatus(0);
         messageMapper.insert(message);
     }
+
+    @Override
+    public boolean deleteMessage(Long msgId, Long patientId) {
+
+        LambdaUpdateWrapper<PatientMessage> wrapper = new LambdaUpdateWrapper<>();
+
+        wrapper.eq(PatientMessage::getId, msgId)
+                .eq(PatientMessage::getPatientId, patientId)
+                .set(PatientMessage::getReadStatus, 2); // 2=已删除
+
+        return messageMapper.update(null, wrapper) > 0;
+    }
 }

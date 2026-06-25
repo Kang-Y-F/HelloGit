@@ -1,6 +1,7 @@
 package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.neusoft.demo.entity.*;
 import com.neusoft.demo.mapper.*;
 import com.neusoft.demo.service.RegisterOrderService;
@@ -30,10 +31,16 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
     private DoctorMapper doctorMapper;
 
     @Autowired
+    private RegisterFeeRuleMapper registerFeeRuleMapper;
+
+    @Autowired
     private PmiPatientMapper patientMapper;
 
     @Autowired
     private DepartmentMapper departmentMapper;
+
+    @Autowired
+    private RegisterExceptionLogMapper registerExceptionLogMapper;
 
 
     @Override
@@ -42,40 +49,84 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
     }
 
     @Override
-    public List<RegisterOrder> listByPatient(Long patientId) {
-        return registerOrderMapper.selectList(
-                new LambdaQueryWrapper<RegisterOrder>()
-                        .eq(RegisterOrder::getUserId, patientId)
-                        .orderByDesc(RegisterOrder::getCreateTime)
-        );
+    public List<RegisterOrderVO> listByPatient(Long patientId) {
+
+        return registerOrderMapper.listPatientOrders(patientId);
+
     }
 
     @Override
-    public String addRegisterOrder(
-            Long userId,
-            Long doctorId,
-            Long scheduleId,
-            Integer priority
-    ) {
+    public String addRegisterOrder(Long userId, Long doctorId, Long scheduleId, Integer priority) {
 
-        Schedule schedule =
-                scheduleMapper.selectById(scheduleId);
+        Schedule schedule = scheduleMapper.selectById(scheduleId);
+
+        QueryWrapper<RegisterOrder> wrapper = new QueryWrapper<>();
+
+        wrapper.eq("user_id", userId)
+                .eq("schedule_id", scheduleId)
+                .eq("status",1);
+
+
+        Long count = registerOrderMapper.selectCount(wrapper);
+
+
+        if(count > 0){
+
+            RegisterExceptionLog log = new RegisterExceptionLog();
+
+            log.setUserId(userId);
+            log.setDoctorId(doctorId);
+            log.setScheduleId(scheduleId);
+
+            log.setExceptionType(1);
+            log.setExceptionMsg("重复挂号");
+
+
+            registerExceptionLogMapper.insert(log);
+
+
+            return "您已经预约该医生";
+        }
 
         if(schedule == null){
+
+            RegisterExceptionLog log = new RegisterExceptionLog();
+
+            log.setUserId(userId);
+            log.setDoctorId(doctorId);
+            log.setScheduleId(scheduleId);
+
+            log.setExceptionType(3);
+            log.setExceptionMsg("挂号失败：排班不存在");
+
+            registerExceptionLogMapper.insert(log);
+
+
             return "排班不存在";
         }
 
-        if(schedule.getCurrentNum()
-                >= schedule.getMaxNum()){
+        if(schedule.getCurrentNum() >= schedule.getMaxNum()){
+
+
+            RegisterExceptionLog log = new RegisterExceptionLog();
+
+            log.setUserId(userId);
+            log.setDoctorId(doctorId);
+            log.setScheduleId(scheduleId);
+
+            log.setExceptionType(2);
+            log.setExceptionMsg("挂号失败：号源已满");
+
+
+            registerExceptionLogMapper.insert(log);
+
 
             return "号源已满";
         }
 
-        RegisterOrder order =
-                new RegisterOrder();
+        RegisterOrder order = new RegisterOrder();
 
-        order.setOrderNo(
-                UUID.randomUUID()
+        order.setOrderNo(UUID.randomUUID()
                         .toString()
                         .replace("-","")
         );
@@ -90,24 +141,29 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
 
         order.setStatus(1);
 
-        order.setPrice(
-                new BigDecimal("20")
-        );
+        /** 根据医生职称获取挂号费用 */
+        Doctor doctor = doctorMapper.selectById(doctorId);
+        RegisterFeeRule rule =
+                registerFeeRuleMapper.selectOne(new QueryWrapper<RegisterFeeRule>()
+                                .eq("title", doctor.getTitle())
+                );
+        if(rule != null){
+            order.setPrice(rule.getPrice());
+        }else{
+            // 默认费用
+            order.setPrice(new BigDecimal("20"));
+        }
 
-        order.setCreateTime(
-                LocalDateTime.now()
-        );
+        order.setCreateTime(LocalDateTime.now());
 
         registerOrderMapper.insert(order);
 
-        schedule.setCurrentNum(
-                schedule.getCurrentNum()+1
-        );
+        schedule.setCurrentNum(schedule.getCurrentNum()+1);
 
         scheduleMapper.updateById(schedule);
 
         // ============ 新增：挂号成功生成站内消息 ============
-        Doctor doctor = doctorMapper.selectById(doctorId);
+
         String doctorName = doctor.getName();
         // 你Schedule实体里存就诊时段的字段是time，直接取
         String time = schedule.getTimeSlot();

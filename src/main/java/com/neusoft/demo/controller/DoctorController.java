@@ -171,17 +171,13 @@ public class DoctorController {
     @GetMapping("/{doctorId}/schedule")
     public Result<List<ScheduleVO>> getSchedule(@PathVariable Long doctorId) {
 
-        return Result.success(
-                scheduleService.getDoctorSchedule(doctorId)
-        );
+        return Result.success(scheduleService.getDoctorSchedule(doctorId));
     }
 
     @GetMapping("/listByDept/{deptId}")
     public Result<?> listByDept(@PathVariable Long deptId) {
 
-        return Result.success(
-                doctorService.listByDept(deptId)
-        );
+        return Result.success(doctorService.listByDept(deptId));
     }
 
     /**
@@ -191,8 +187,7 @@ public class DoctorController {
     public Result<List<Doctor>> getRecommendDoctor() {
         List<Doctor> list = doctorService.getRecommendDoctor(6);
         // 遍历清空密码
-        list
-                .forEach(doc -> doc.setPassword(null));
+        list.forEach(doc -> doc.setPassword(null));
         return Result.success(list);
     }
 
@@ -202,8 +197,55 @@ public class DoctorController {
     @GetMapping("/search")
     public Result<List<Doctor>> searchDoctor(@RequestParam String keyword) {
         List<Doctor> list = doctorService.searchDoctor(keyword);
-        list
-                .forEach(doc -> doc.setPassword(null));
+        list.forEach(doc -> doc.setPassword(null));
         return Result.success(list);
+    }
+
+    // ===================== 医生管理模块（管理员用） =====================
+
+    /**
+     * 查询医生列表（可按审核状态筛选）
+     */
+    @GetMapping("/page")
+    public List<Doctor> queryDoctorList(@RequestParam(required = false) Integer auditStatus) {
+        return doctorService.list(auditStatus);
+    }
+
+    /**
+     * 审核医生账号（通过/拒绝）
+     */
+    @PutMapping("/review/{id}")
+    public String reviewDoctor(@PathVariable Long id,
+                               @RequestParam Integer auditStatus) {
+        doctorService.auditDoctor(id, auditStatus);
+        return "操作成功";
+    }
+
+    /**
+     * 启用医生账号
+     */
+    @PutMapping("/enable/{id}")
+    public String enableDoctor(@PathVariable Long id) {
+        doctorService.updateStatus(id, 1);
+        return "操作成功";
+    }
+
+    /**
+     * 禁用医生账号
+     */
+    @PutMapping("/disable/{id}")
+    public String disableDoctor(@PathVariable Long id) {
+        doctorService.updateStatus(id, 0);
+        return "操作成功";
+    }
+
+    /**
+     * 修改医生角色
+     */
+    @PutMapping("/assign-role/{id}")
+    public String assignRole(@PathVariable Long id,
+                             @RequestParam String role) {
+        doctorService.updateRole(id, role);
+        return "操作成功";
     }
 }

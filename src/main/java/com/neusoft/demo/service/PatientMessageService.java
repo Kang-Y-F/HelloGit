@@ -13,4 +13,6 @@ public interface PatientMessageService {
 
     // 新增站内消息（业务调用：挂号成功、AI导诊完成等场景）
     void addMessage(PatientMessage message);
+
+    boolean deleteMessage(Long msgId, Long patientId);
 }
