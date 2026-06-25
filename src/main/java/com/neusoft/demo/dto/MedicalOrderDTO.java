@@ -1,6 +1,8 @@
 package com.neusoft.demo.dto;
 
 import lombok.Data;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -36,5 +38,10 @@ public class MedicalOrderDTO {
         private String drugName;
         private String dosage;
         private String drugUsage;
+        private Long drugId;
+        private Integer quantity;
+        private Integer days;
+        private BigDecimal unitPrice;
+        private BigDecimal totalAmount;
     }
 }

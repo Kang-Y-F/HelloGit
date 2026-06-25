@@ -83,4 +83,12 @@ public class PaymentController {
         Claims claims = JwtUtil.parseToken(request.getHeader("token"));
         return claims.get("userId", Long.class);
     }
+
+    /** 待缴处方费列表 */
+    @GetMapping("/pending-prescription")
+    public Result<?> pendingPrescription(@RequestParam(required = false) String keyword) {
+        // 查 prescription 表：pharmacist_status=1 AND pay_status=0
+        // 关联 pmi_patient 拿姓名/手机号，关联 doctor 拿医生名
+        return Result.success(paymentService.listPendingPrescription(keyword));
+    }
 }

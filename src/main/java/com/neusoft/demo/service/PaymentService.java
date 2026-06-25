@@ -20,4 +20,6 @@ public interface PaymentService {
 
     /** 今日收费统计 */
     Map<String, Object> todayStats(Long operatorId);
+
+    List<Map<String, Object>> listPendingPrescription(String keyword);
 }

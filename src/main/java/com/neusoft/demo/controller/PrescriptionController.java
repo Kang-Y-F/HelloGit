@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/prescription")
@@ -31,7 +32,7 @@ public class PrescriptionController {
      */
     @GetMapping("/patient/{patientId}")
     public Result<?> getByPatient(@PathVariable Long patientId) {
-        List<Prescription> list = prescriptionMapper.selectByPatientId(patientId);
+        List<Map<String, Object>> list = prescriptionMapper.selectByPatientId(patientId);
         return Result.success(list);
     }
 

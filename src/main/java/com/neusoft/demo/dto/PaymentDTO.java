@@ -42,4 +42,7 @@ public class PaymentDTO {
 
     /** 备注 */
     private String remark;
+
+    /** 处方ID（billType=3 时使用） */
+    private Long prescriptionId;
 }
