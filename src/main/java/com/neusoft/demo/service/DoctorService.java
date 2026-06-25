@@ -36,4 +36,16 @@ public interface DoctorService {
 
     /** 搜索医生 */
     List<Doctor> searchDoctor(String keyword);
+
+    /** 管理员端：查询医生列表（可按审核状态筛选），0待审核 1通过 2拒绝，为空则查询全部 */
+    List<Doctor> list(Integer auditStatus);
+
+    /** 管理员端：审核医生账号（通过/拒绝）,1通过 2拒绝 */
+    void auditDoctor(Long id, Integer auditStatus);
+
+    /** 管理员端：更新医生状态（启用/禁用） */
+    void updateStatus(Long id, Integer status);
+
+    /** 管理员端：更新医生角色（doctor / registrar / pharmacist / admin） */
+    void updateRole(Long id, String role);
 }

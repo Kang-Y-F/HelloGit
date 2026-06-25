@@ -30,4 +30,6 @@ public class Doctor {
     private String password;
 
     private Integer status;
+
+    private Integer auditStatus;
 }

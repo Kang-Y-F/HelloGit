@@ -80,5 +80,26 @@
 
     </select>
 
+    <select id="deptRank" resultType="map">
+        SELECT d.name AS deptName,
+               COUNT(r.id) AS total
+        FROM register_order r
+                 LEFT JOIN doctor doc ON r.doctor_id = doc.id
+                 LEFT JOIN department d ON doc.dept_id = d.id
+        WHERE r.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        GROUP BY d.name
+        ORDER BY total DESC
+    </select>
+
+    <select id="doctorLoad" resultType="map">
+        SELECT doc.name AS doctorName,
+               COUNT(r.id) AS total
+        FROM register_order r
+                 LEFT JOIN doctor doc ON r.doctor_id = doc.id
+        WHERE DATE(r.create_time) = CURDATE()
+        GROUP BY doc.id
+        ORDER BY total DESC
+    </select>
+
 
 </mapper>

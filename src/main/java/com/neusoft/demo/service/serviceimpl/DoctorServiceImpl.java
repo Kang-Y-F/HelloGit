@@ -1,6 +1,7 @@
 package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.neusoft.demo.dto.DoctorAddDTO;
 import com.neusoft.demo.dto.LoginDTO;
@@ -196,5 +197,43 @@ public class DoctorServiceImpl implements DoctorService {
                 .and(w -> w.like(Doctor::getName, likeStr)
                         .or().like(Doctor::getSkills, likeStr));
         return doctorMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<Doctor> list(Integer auditStatus) {
+        QueryWrapper<Doctor> wrapper = new QueryWrapper<>();
+
+        if (auditStatus != null) {
+            wrapper.eq("audit_status", auditStatus);
+        }
+
+        return doctorMapper.selectList(wrapper);
+    }
+
+    @Override
+    public void auditDoctor(Long id, Integer auditStatus) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setAuditStatus(auditStatus);
+
+        doctorMapper.updateById(doctor);
+    }
+
+    @Override
+    public void updateStatus(Long id, Integer status) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setStatus(status);
+
+        doctorMapper.updateById(doctor);
+    }
+
+    @Override
+    public void updateRole(Long id, String role) {
+        Doctor doctor = new Doctor();
+        doctor.setId(id);
+        doctor.setRole(role);
+
+        doctorMapper.updateById(doctor);
     }
 }

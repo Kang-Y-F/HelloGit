@@ -87,4 +87,64 @@ public class ScheduleServiceImpl implements ScheduleService {
                 return "周日";
         }
     }
+
+    /** 查询排班列表（可按医生/日期筛选）*/
+    @Override
+    public List<Schedule> list(Long doctorId, String date) {
+        QueryWrapper<Schedule> wrapper = new QueryWrapper<>();
+
+        if (doctorId != null) {
+            wrapper.eq("doctor_id", doctorId);
+        }
+
+        if (date != null) {
+            wrapper.eq("work_date", date);
+        }
+
+        return scheduleMapper.selectList(wrapper);
+    }
+
+    /** 新增排班 */
+    @Override
+    public void addSchedule(Schedule schedule) {
+        schedule.setCurrentNum(0);
+        scheduleMapper.insert(schedule);
+    }
+
+    /** 修改最大号源 */
+    @Override
+    public void updateMaxNum(Long scheduleId, Integer maxNum) {
+        Schedule s = new Schedule();
+        s.setId(scheduleId);
+        s.setMaxNum(maxNum);
+
+        scheduleMapper.updateById(s);
+    }
+
+    /** 删除排班 */
+    @Override
+    public void deleteSchedule(Long scheduleId) {
+        scheduleMapper.deleteById(scheduleId);
+    }
+
+    /** 按医生查询排班 */
+    @Override
+    public List<Schedule> getDoctorScheduleForAdmin(Long doctorId) {
+        return scheduleMapper.selectList(
+                new QueryWrapper<Schedule>().eq("doctor_id", doctorId)
+        );
+    }
+
+    /** 补号源判断 */
+    @Override
+    public boolean hasQuota(Long scheduleId) {
+
+        Schedule schedule = scheduleMapper.selectById(scheduleId);
+
+        if (schedule == null) {
+            return false;
+        }
+
+        return schedule.getCurrentNum() < schedule.getMaxNum();
+    }
 }
