@@ -16,4 +16,10 @@ public interface NoticeService {
     /** 删除公告 */
     void deleteNotice(Long id);
 
+    /** 医生查询公告 */
+    List<Notice> listDoctorNotice();
+
+    /** 患者查询公告 */
+    List<Notice> listPatientNotice();
+
 }

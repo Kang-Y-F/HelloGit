@@ -45,4 +45,26 @@ public class NoticeServiceImpl implements NoticeService {
 
     }
 
+    @Override
+    public List<Notice> listDoctorNotice(){
+
+        return noticeMapper.selectList(
+                new QueryWrapper<Notice>()
+                        .in("target_type",1,3)
+                        .orderByDesc("create_time")
+        );
+
+    }
+
+    @Override
+    public List<Notice> listPatientNotice(){
+
+        return noticeMapper.selectList(
+                new QueryWrapper<Notice>()
+                        .in("target_type",2,3)
+                        .orderByDesc("create_time")
+        );
+
+    }
+
 }
