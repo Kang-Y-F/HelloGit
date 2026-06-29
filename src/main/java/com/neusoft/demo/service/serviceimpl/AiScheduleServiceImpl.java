@@ -72,6 +72,7 @@ public class AiScheduleServiceImpl implements AiScheduleService {
                         "输出格式必须严格如下（不要JSON）：\n" +
                         "医生ID：xxx\n" +
                         "时间段：上午/下午\n" +
+                        "建议负载：xxx\n" +
                         "原因：xxx\n" +
                         "---（每个医生一段，用---分隔）\n\n" +
                         "医生数据如下：\n" +
@@ -94,6 +95,7 @@ public class AiScheduleServiceImpl implements AiScheduleService {
 
             Long doctorId = null;
             String timeSlot = null;
+            Integer expectedLoad = null;
 
             for (String line : block.split("\n")) {
 
@@ -105,6 +107,10 @@ public class AiScheduleServiceImpl implements AiScheduleService {
 
                 if (line.startsWith("时间段")) {
                     timeSlot = line.replace("时间段：", "").trim();
+                }
+                if (line.startsWith("建议负载")) {
+
+                    expectedLoad = Integer.valueOf(line.replaceAll("\\D+", ""));
                 }
             }
 
@@ -119,6 +125,7 @@ public class AiScheduleServiceImpl implements AiScheduleService {
             plan.setTimeSlot(timeSlot);
             plan.setStatus(0);
             plan.setCreateTime(LocalDateTime.now());
+            plan.setExpectedLoad(expectedLoad);
 
             aiSchedulePlanMapper.insert(plan);
             result.add(plan);

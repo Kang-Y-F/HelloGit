@@ -42,4 +42,24 @@ public class NoticeController {
 
     }
 
+    /**
+     * 医生查看公告
+     */
+    @GetMapping("/doctor")
+    public List<Notice> doctorNotice(){
+
+        return noticeService.listDoctorNotice();
+
+    }
+
+    /**
+     * 患者查看公告
+     */
+    @GetMapping("/patient")
+    public List<Notice> patientNotice(){
+
+        return noticeService.listPatientNotice();
+
+    }
+
 }

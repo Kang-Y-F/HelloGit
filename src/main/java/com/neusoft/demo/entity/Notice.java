@@ -21,4 +21,7 @@ public class Notice {
     /** 发布时间 */
     private LocalDateTime createTime;
 
+    /** 公告对象 1医生 2患者 3全部 */
+    private Integer targetType;
+
 }

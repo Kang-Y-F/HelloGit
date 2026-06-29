@@ -44,6 +44,11 @@ public class UserController {
         return Result.success("注册成功");
     }
 
+    @PostMapping("/sendCode")
+    public Result sendCode(String phone) {
+        return pmiPatientService.sendCode(phone);
+    }
+
     @GetMapping("/info")
     public Result<PatientInfoVO> getUserInfo(HttpServletRequest request) {
         // 从JWT拦截器存入的request中获取登录用户ID

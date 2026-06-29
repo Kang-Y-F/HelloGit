@@ -12,4 +12,6 @@ public class RegisterDTO {
 
     private String name;
 
+    private String code;
+
 }

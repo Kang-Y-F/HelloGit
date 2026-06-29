@@ -207,45 +207,52 @@ public class DoctorController {
      * 查询医生列表（可按审核状态筛选）
      */
     @GetMapping("/page")
-    public List<Doctor> queryDoctorList(@RequestParam(required = false) Integer auditStatus) {
-        return doctorService.list(auditStatus);
+    public Result<?> queryDoctorList(@RequestParam(required = false) Integer auditStatus) {
+
+        return Result.success(doctorService.list(auditStatus));
     }
 
     /**
      * 审核医生账号（通过/拒绝）
      */
     @PutMapping("/review/{id}")
-    public String reviewDoctor(@PathVariable Long id,
-                               @RequestParam Integer auditStatus) {
+    public Result<?> reviewDoctor(@PathVariable Long id, @RequestParam Integer auditStatus) {
+
         doctorService.auditDoctor(id, auditStatus);
-        return "操作成功";
+
+        return Result.success("操作成功");
     }
 
     /**
      * 启用医生账号
      */
     @PutMapping("/enable/{id}")
-    public String enableDoctor(@PathVariable Long id) {
+    public Result<?> enableDoctor(@PathVariable Long id) {
+
         doctorService.updateStatus(id, 1);
-        return "操作成功";
+
+        return Result.success("启用成功");
     }
 
     /**
      * 禁用医生账号
      */
     @PutMapping("/disable/{id}")
-    public String disableDoctor(@PathVariable Long id) {
+    public Result<?> disableDoctor(@PathVariable Long id) {
+
         doctorService.updateStatus(id, 0);
-        return "操作成功";
+
+        return Result.success("禁用成功");
     }
 
     /**
      * 修改医生角色
      */
     @PutMapping("/assign-role/{id}")
-    public String assignRole(@PathVariable Long id,
-                             @RequestParam String role) {
+    public Result<?> assignRole(@PathVariable Long id, @RequestParam String role) {
+
         doctorService.updateRole(id, role);
-        return "操作成功";
+
+        return Result.success("角色修改成功");
     }
 }
