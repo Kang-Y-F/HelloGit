@@ -9,6 +9,7 @@ import com.neusoft.demo.mapper.*;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.vo.MedicalRecordVO;
 import com.neusoft.demo.vo.PatientMedicalRecordVO;
+import com.neusoft.demo.vo.PatientMedicalRecordDetailVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,8 +32,10 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Autowired private LabReportMapper labReportMapper;
     @Autowired private MedicalOrderMapper medicalOrderMapper;
     @Autowired private CheckOrderMapper checkOrderMapper;
-    @Autowired
-    private DoctorMapper doctorMapper;
+    @Autowired private DoctorMapper doctorMapper;
+    @Autowired private PrescriptionMapper prescriptionMapper;
+    @Autowired private PmiPatientMapper pmiPatientMapper;
+    @Autowired private DepartmentMapper departmentMapper;
 
 
     // 日期格式化
@@ -245,6 +248,139 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                     .add(vo);
         }
         return resultList;
+    }
+
+    // ========== 新增：患者端查询病历完整详情 ==========
+    @Override
+    public PatientMedicalRecordDetailVO getPatientMedicalRecordDetail(Long recordId) {
+        // 1. 查询病历基础信息
+        MedicalRecord record = medicalRecordMapper.selectById(recordId);
+        if (record == null) {
+            throw new RuntimeException("病历不存在");
+        }
+
+        PatientMedicalRecordDetailVO vo = new PatientMedicalRecordDetailVO();
+
+        // 2. 基础信息
+        vo.setId(record.getId());
+        if (record.getCreateTime() != null) {
+            vo.setVisitDate(record.getCreateTime().format(DATE_FORMAT));
+        }
+        vo.setCreateTime(record.getCreateTime());
+
+        // 3. 查询医生信息
+        if (record.getDoctorId() != null) {
+            Doctor doctor = doctorMapper.selectById(record.getDoctorId());
+            if (doctor != null) {
+                vo.setDoctorName(doctor.getName());
+                vo.setDoctorTitle(doctor.getTitle());
+
+                // 查询科室信息
+                if (doctor.getDeptId() != null) {
+                    Department dept = departmentMapper.selectById(doctor.getDeptId());
+                    if (dept != null) {
+                        vo.setDepartmentName(dept.getName());
+                    }
+                }
+            }
+        }
+
+        // 4. 病历内容
+        vo.setChiefComplaint(record.getChiefComplaint());
+        vo.setPresentHistory(record.getPresentHistory());
+        vo.setDiagnosis(record.getDiagnosis());
+
+        // 5. AI辅助信息
+        vo.setAiDiagnosis(record.getAiDiagnosis());
+        vo.setAiCheckAdvice(record.getAiCheckAdvice());
+        vo.setAiDrugAdvice(record.getAiDrugAdvice());
+        vo.setAiConfirmStatus(record.getAiConfirmStatus());
+
+        // 6. 查询检查报告（含图片）
+        List<PatientMedicalRecordDetailVO.CheckReportVO> checkReports = new ArrayList<>();
+        if (record.getRegisterOrderId() != null) {
+            List<MedicalOrder> orders = medicalOrderMapper.selectByRegisterOrderId(record.getRegisterOrderId());
+            for (MedicalOrder mo : orders) {
+                if (mo.getOrderType() == 1) { // 检查类
+                    List<CheckReport> crs = checkReportMapper.selectList(
+                            new LambdaQueryWrapper<CheckReport>()
+                                    .eq(CheckReport::getOrderId, mo.getId())
+                    );
+                    for (CheckReport cr : crs) {
+                        PatientMedicalRecordDetailVO.CheckReportVO crVO = new PatientMedicalRecordDetailVO.CheckReportVO();
+                        crVO.setId(cr.getId());
+                        crVO.setImgType(cr.getImgType());
+                        crVO.setImageUrl(cr.getImageUrl());
+                        crVO.setCtUrl(cr.getCtUrl());
+                        crVO.setReportText(cr.getReportText());
+                        crVO.setAiAnalysis(cr.getAiAnalysis());
+                        crVO.setDoctorConfirmedText(cr.getDoctorConfirmedText());
+                        crVO.setAiConfirmStatus(cr.getAiConfirmStatus());
+                        crVO.setCreateTime(cr.getCreateTime());
+                        checkReports.add(crVO);
+                    }
+                }
+            }
+        }
+        vo.setCheckReports(checkReports);
+
+        // 7. 查询检验报告
+        List<PatientMedicalRecordDetailVO.LabReportVO> labReports = new ArrayList<>();
+        if (record.getRegisterOrderId() != null) {
+            List<MedicalOrder> orders = medicalOrderMapper.selectByRegisterOrderId(record.getRegisterOrderId());
+            for (MedicalOrder mo : orders) {
+                if (mo.getOrderType() == 1 || mo.getOrderType() == 2) { // 检查/检验类
+                    List<CheckOrder> cos = checkOrderMapper.selectByOrderId(mo.getId());
+                    for (CheckOrder co : cos) {
+                        if (co.getOrderType() == 2) { // 检验类
+                            List<LabReport> lrs = labReportMapper.selectList(
+                                    new LambdaQueryWrapper<LabReport>()
+                                            .eq(LabReport::getOrderId, co.getId())
+                            );
+                            for (LabReport lr : lrs) {
+                                PatientMedicalRecordDetailVO.LabReportVO lrVO = new PatientMedicalRecordDetailVO.LabReportVO();
+                                lrVO.setId(lr.getId());
+                                lrVO.setItemName(lr.getItemName());
+                                lrVO.setTestValue(lr.getTestValue());
+                                lrVO.setReferenceRange(lr.getReferenceRange());
+                                lrVO.setAbnormalFlag(lr.getAbnormalFlag());
+                                lrVO.setReportContent(lr.getReportContent());
+                                lrVO.setAuditStatus(lr.getAuditStatus());
+                                lrVO.setCreateTime(lr.getCreateTime());
+                                labReports.add(lrVO);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        vo.setLabReports(labReports);
+
+        // 8. 查询处方用药
+        List<PatientMedicalRecordDetailVO.PrescriptionVO> prescriptions = new ArrayList<>();
+        if (record.getRegisterOrderId() != null) {
+            List<Prescription> prList = prescriptionMapper.selectList(
+                    new LambdaQueryWrapper<Prescription>()
+                            .eq(Prescription::getRegisterOrderId, record.getRegisterOrderId())
+            );
+            for (Prescription pr : prList) {
+                PatientMedicalRecordDetailVO.PrescriptionVO prVO = new PatientMedicalRecordDetailVO.PrescriptionVO();
+                prVO.setId(pr.getId());
+                prVO.setPrescriptionNo(pr.getPrescriptionNo());
+                prVO.setDrugName(pr.getDrugName());
+                prVO.setDosage(pr.getDosage());
+                prVO.setQuantity(pr.getQuantity());
+                prVO.setDays(pr.getDays());
+                prVO.setDrugUsage(pr.getDrugUsage());
+                prVO.setAuditResult(pr.getAuditResult());
+                prVO.setAuditStatus(pr.getAuditStatus());
+                prVO.setCreateTime(pr.getCreateTime());
+                prescriptions.add(prVO);
+            }
+        }
+        vo.setPrescriptions(prescriptions);
+
+        return vo;
     }
 
     /**

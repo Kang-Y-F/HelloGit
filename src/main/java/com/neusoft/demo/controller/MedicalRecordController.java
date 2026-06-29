@@ -6,6 +6,7 @@ import com.neusoft.demo.dto.MedicalRecordDTO;
 import com.neusoft.demo.service.MedicalRecordService;
 import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.vo.PatientMedicalRecordVO;
+import com.neusoft.demo.vo.PatientMedicalRecordDetailVO;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,5 +90,25 @@ public class MedicalRecordController {
         Long patientId = Long.parseLong(userIdObj.toString());
         List<PatientMedicalRecordVO> list = medicalRecordService.listPatientMedicalRecord(patientId);
         return Result.success(list);
+    }
+
+    /**
+     * P2 患者端：查询单个病历完整详情（含检查、检验、用药、图片、AI解析）
+     * GET /medical-record/patient-detail/{recordId}
+     */
+    @GetMapping("/patient-detail/{recordId}")
+    public Result<PatientMedicalRecordDetailVO> patientMedicalRecordDetail(@PathVariable Long recordId, HttpServletRequest request) {
+        // 从Token获取当前患者ID（用于权限校验）
+        Object userIdObj = request.getAttribute("userId");
+        if (userIdObj == null) {
+            return Result.fail("请先登录");
+        }
+
+        try {
+            PatientMedicalRecordDetailVO detail = medicalRecordService.getPatientMedicalRecordDetail(recordId);
+            return Result.success(detail);
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
     }
 }

@@ -4,6 +4,7 @@ import com.neusoft.demo.dto.AiConfirmDTO;
 import com.neusoft.demo.dto.MedicalRecordDTO;
 import com.neusoft.demo.vo.MedicalRecordVO;
 import com.neusoft.demo.vo.PatientMedicalRecordVO;
+import com.neusoft.demo.vo.PatientMedicalRecordDetailVO;
 
 import java.util.List;
 
@@ -24,4 +25,7 @@ public interface MedicalRecordService {
 
     /** 根据患者ID查询本人所有病历（患者端） */
     List<PatientMedicalRecordVO> listPatientMedicalRecord(Long patientId);
+
+    /** 患者端查询单个病历完整详情（包含检查、检验、用药、图片、AI解析） */
+    PatientMedicalRecordDetailVO getPatientMedicalRecordDetail(Long recordId);
 }
