@@ -60,6 +60,7 @@ public class RegisterDeskServiceImpl implements RegisterDeskService {
                 ? java.math.BigDecimal.valueOf(dto.getPrice())
                 : new java.math.BigDecimal("15.00"));
         order.setPriority(dto.getPriority() != null ? dto.getPriority() : 0);
+        order.setSource("offline");  // 标记为线下挂号（挂号员）
         order.setCreateTime(LocalDateTime.now());
         registerOrderMapper.insert(order);
 

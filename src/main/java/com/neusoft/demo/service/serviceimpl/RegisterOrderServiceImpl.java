@@ -56,7 +56,7 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
     }
 
     @Override
-    public String addRegisterOrder(Long userId, Long doctorId, Long scheduleId, Integer priority) {
+    public RegisterOrder addRegisterOrder(Long userId, Long doctorId, Long scheduleId, Integer priority) {
 
         Schedule schedule = scheduleMapper.selectById(scheduleId);
 
@@ -85,7 +85,7 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
             registerExceptionLogMapper.insert(log);
 
 
-            return "您已经预约该医生";
+            throw new RuntimeException("您已经预约该医生");
         }
 
         if(schedule == null){
@@ -102,7 +102,7 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
             registerExceptionLogMapper.insert(log);
 
 
-            return "排班不存在";
+            throw new RuntimeException("排班不存在");
         }
 
         if(schedule.getCurrentNum() >= schedule.getMaxNum()){
@@ -121,7 +121,7 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
             registerExceptionLogMapper.insert(log);
 
 
-            return "号源已满";
+            throw new RuntimeException("号源已满");
         }
 
         RegisterOrder order = new RegisterOrder();
@@ -140,6 +140,8 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
         order.setPriority(priority);
 
         order.setStatus(1);
+
+        order.setSource("online");  // 标记为线上挂号
 
         /** 根据医生职称获取挂号费用 */
         Doctor doctor = doctorMapper.selectById(doctorId);
@@ -176,7 +178,7 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
         msg.setJumpPath("pages/my-orders/my-orders");
         messageService.addMessage(msg);
 
-        return "挂号成功";
+        return order;
     }
 
     @Override

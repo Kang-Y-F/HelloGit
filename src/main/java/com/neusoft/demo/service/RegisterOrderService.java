@@ -14,7 +14,7 @@ public interface RegisterOrderService {
     List<RegisterOrderVO> listByPatient(Long patientId);
 
     /** 在线挂号 */
-    String addRegisterOrder(
+    RegisterOrder addRegisterOrder(
             Long userId,
             Long doctorId,
             Long scheduleId,

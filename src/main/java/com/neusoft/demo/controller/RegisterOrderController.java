@@ -1,6 +1,7 @@
 package com.neusoft.demo.controller;
 
 import com.neusoft.demo.common.Result;
+import com.neusoft.demo.entity.RegisterOrder;
 import com.neusoft.demo.service.RegisterOrderService;
 import com.neusoft.demo.vo.RegisterOrderVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,14 +41,17 @@ public class RegisterOrderController {
 
         Long userId = (Long) request.getAttribute("userId");
 
-        return Result.success(
-                registerOrderService.addRegisterOrder(
-                        userId,
-                        doctorId,
-                        scheduleId,
-                        priority
-                )
-        );
+        try {
+            RegisterOrder order = registerOrderService.addRegisterOrder(
+                    userId,
+                    doctorId,
+                    scheduleId,
+                    priority
+            );
+            return Result.success(order);
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
     }
 
     /**
