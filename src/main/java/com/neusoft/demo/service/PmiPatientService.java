@@ -1,5 +1,6 @@
 package com.neusoft.demo.service;
 
+import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.LoginDTO;
 import com.neusoft.demo.dto.PatientUpdateDTO;
 import com.neusoft.demo.dto.RegisterDTO;
@@ -21,4 +22,6 @@ public interface PmiPatientService {
 
     /** 查询所有患者列表 */
     List<PmiPatient> list();
+
+    Result sendCode(String phone);
 }

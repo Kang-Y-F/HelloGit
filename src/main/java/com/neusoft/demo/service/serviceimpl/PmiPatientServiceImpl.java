@@ -2,6 +2,7 @@ package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.LoginDTO;
 import com.neusoft.demo.dto.PatientUpdateDTO;
 import com.neusoft.demo.dto.RegisterDTO;
@@ -13,15 +14,21 @@ import com.neusoft.demo.utils.PasswordUtil;
 import com.neusoft.demo.vo.LoginVO;
 import com.neusoft.demo.vo.PatientInfoVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class PmiPatientServiceImpl implements PmiPatientService {
 
     @Autowired
     private PmiPatientMapper pmiPatientMapper;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     @Override
     public LoginVO login(LoginDTO loginDTO) {
@@ -53,29 +60,70 @@ public class PmiPatientServiceImpl implements PmiPatientService {
     @Override
     public void register(RegisterDTO registerDTO) {
 
+        // =========================
+        // 1. 校验验证码（新增）
+        // =========================
+        String redisCode = (String) redisTemplate.opsForValue()
+                .get("REGISTER_CODE:" + registerDTO.getPhone());
+
+        if (redisCode == null) {
+            throw new RuntimeException("验证码已过期，请重新获取");
+        }
+
+        if (!redisCode.equals(registerDTO.getCode())) {
+            throw new RuntimeException("验证码错误");
+        }
+
+        // =========================
+        // 2. 校验手机号是否已注册（原逻辑）
+        // =========================
         PmiPatient patient = pmiPatientMapper.selectOne(
                 new LambdaQueryWrapper<PmiPatient>()
-                        .eq(PmiPatient::getPhone,
-                                registerDTO.getPhone())
+                        .eq(PmiPatient::getPhone, registerDTO.getPhone())
         );
 
-        if(patient != null){
+        if (patient != null) {
             throw new RuntimeException("手机号已注册");
         }
 
+        // =========================
+        // 3. 创建用户（原逻辑）
+        // =========================
         PmiPatient p = new PmiPatient();
 
         p.setPhone(registerDTO.getPhone());
-
         p.setName(registerDTO.getName());
 
         p.setPassword(
-                PasswordUtil.encode(
-                        registerDTO.getPassword()
-                )
+                PasswordUtil.encode(registerDTO.getPassword())
         );
 
         pmiPatientMapper.insert(p);
+
+        // =========================
+        // 4. 删除验证码（防重复使用，新增）
+        // =========================
+        redisTemplate.delete("REGISTER_CODE:" + registerDTO.getPhone());
+    }
+
+    @Override
+    public Result sendCode(String phone) {
+
+        // 1. 生成6位验证码
+        String code = String.valueOf((int)((Math.random() * 9 + 1) * 100000));
+
+        // 2. 存入Redis（5分钟）
+        redisTemplate.opsForValue().set(
+                "LOGIN_CODE:" + phone,
+                code,
+                5,
+                TimeUnit.MINUTES
+        );
+
+        // 3. 模拟短信发送
+        System.out.println("验证码：" + code);
+
+        return Result.success("验证码已发送");
     }
 
     @Override
