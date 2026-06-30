@@ -41,7 +41,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/admin/add",
                         "/error",
                         "/upload/**",      // 上传接口
-                        "/uploads/**"      // 静态资源（上传的文件）
+                        "/uploads/**" ,     // 静态资源（上传的文件）
+                        "/hospital-info",
+                        "/user/sendCode"
                 );
     }
 

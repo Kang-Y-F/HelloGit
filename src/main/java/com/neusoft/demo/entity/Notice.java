@@ -1,5 +1,7 @@
 package com.neusoft.demo.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -7,6 +9,7 @@ import java.time.LocalDateTime;
 @Data
 public class Notice {
 
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /** 公告标题 */
