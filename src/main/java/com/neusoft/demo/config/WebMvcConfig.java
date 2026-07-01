@@ -37,6 +37,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/health",          // ← 加这行
                         "/report/ct/**",    // ← 加这行
                         "/report/lab/**",    // ← 加这行
+                        "/lab-report/**",
                         "/admin/login",
                         "/admin/add",
                         "/error",

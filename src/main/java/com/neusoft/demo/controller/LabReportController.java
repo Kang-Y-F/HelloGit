@@ -1,6 +1,8 @@
 package com.neusoft.demo.controller;
 
 import com.neusoft.demo.common.Result;
+import com.neusoft.demo.dto.BatchLabReportCreateRequest;
+import com.neusoft.demo.dto.BatchLabReportCreateResponse;
 import com.neusoft.demo.dto.LabReportConfirmDTO;
 import com.neusoft.demo.dto.LabReportDTO;
 import com.neusoft.demo.entity.LabReport;
@@ -10,7 +12,11 @@ import com.neusoft.demo.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/lab-report")
@@ -18,7 +24,7 @@ public class LabReportController {
 
     @Autowired private LabReportService labReportService;
     @Autowired private LabReportMapper  labReportMapper;
-
+    @Autowired private RestTemplate restTemplate;
     /** 待执行检验单列表 */
     @GetMapping("/pending")
     public Result<?> pendingLabOrders(@RequestParam(required = false) String keyword) {
@@ -104,5 +110,38 @@ public class LabReportController {
         return Result.success(report);
     }
 
+    /** 获取患者所有有历史记录的指标 */
+    @GetMapping("/indicators/{patientId}")
+    public Result<?> indicators(@PathVariable Long patientId) {
+        return Result.success(labReportService.getAvailableIndicators(patientId));
+    }
 
+    /** 通用多指标趋势 */
+    @GetMapping("/trend/{patientId}")
+    public Result<?> trend(@PathVariable Long patientId, @RequestParam String indicator) {
+        return Result.success(labReportService.getTrend(patientId, indicator));
+    }
+
+    @PostMapping("/batch-create")
+    public Result<BatchLabReportCreateResponse> batchCreate(
+            @RequestBody BatchLabReportCreateRequest request) {
+        BatchLabReportCreateResponse resp = labReportService.batchCreate(request);
+        return Result.success(resp);
+    }
+    @Value("${python.predict.service.url}")
+    private String pythonHl7BaseUrl;
+    @PostMapping("/hl7-sim/cgm-series")
+    public Result<?> simulateCgmSeries(@RequestBody Map<String, Object> body) {
+        // 修复：把数字转为字符串，匹配Python str类型要求
+        if (body.containsKey("patientId")) {
+            body.put("patientId", String.valueOf(body.get("patientId")));
+        }
+        if (body.containsKey("checkOrderId")) {
+            body.put("checkOrderId", String.valueOf(body.get("checkOrderId")));
+        }
+
+        String targetUrl = pythonHl7BaseUrl + "/hl7-sim/cgm-series";
+        Map<String, Object> pythonResp = restTemplate.postForObject(targetUrl, body, Map.class);
+        return Result.success(pythonResp);
+    }
 }

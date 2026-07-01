@@ -1,5 +1,7 @@
 package com.neusoft.demo.service;
 
+import com.neusoft.demo.dto.BatchLabReportCreateRequest;
+import com.neusoft.demo.dto.BatchLabReportCreateResponse;
 import com.neusoft.demo.dto.LabReportDTO;
 import com.neusoft.demo.entity.LabReport;
 import com.neusoft.demo.vo.CheckOrderVO;
@@ -27,4 +29,9 @@ public interface LabReportService {
     /** 修改后确认（auditStatus=3 + 写入修改内容） */
     boolean confirmWithEdit(Long reportId, Integer auditStatus, String editedContent);
 
+    Map<String, Object> getTrend(Long patientId, String indicator);
+    List<String> getAvailableIndicators(Long patientId);
+
+    // LabReportService.java 接口里新增
+    BatchLabReportCreateResponse batchCreate(BatchLabReportCreateRequest request);
 }

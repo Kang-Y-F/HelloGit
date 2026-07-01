@@ -54,4 +54,7 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
         ORDER BY lr.create_time DESC
         """)
     List<Map<String, Object>> selectTodayWithPatient(@Param("operatorId") Long operatorId);
+
+    @Select("SELECT DISTINCT item_name FROM lab_report WHERE patient_id = #{patientId} ORDER BY item_name")
+    List<String> selectDistinctItems(@Param("patientId") Long patientId);
 }

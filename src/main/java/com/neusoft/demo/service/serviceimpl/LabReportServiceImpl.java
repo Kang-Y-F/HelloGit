@@ -1,6 +1,10 @@
 package com.neusoft.demo.service.serviceimpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.neusoft.demo.dto.BatchLabReportCreateRequest;
+import com.neusoft.demo.dto.BatchLabReportCreateResponse;
 import com.neusoft.demo.dto.LabReportDTO;
 import com.neusoft.demo.entity.CheckOrder;
 import com.neusoft.demo.entity.LabReport;
@@ -13,21 +17,36 @@ import com.neusoft.demo.vo.CheckOrderVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Slf4j
 @Service
-public class LabReportServiceImpl implements LabReportService {
+public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport> implements LabReportService {
 
     @Autowired private LabReportMapper    labReportMapper;
     @Autowired private CheckOrderMapper   checkOrderMapper;
     @Autowired private MedicalOrderMapper medicalOrderMapper;
     @Autowired private ChatClient         chatClient;
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final RestTemplate restTemplate;
+
+    // 推荐用构造器注入，而不是 @Autowired 字段注入，方便测试且不会出现循环依赖问题
+    public LabReportServiceImpl(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    // application.yml 里配置 python.predict.service.url: http://127.0.0.1:8000
+    @Value("${python.predict.service.url}")
+    private String pythonPredictServiceUrl;
     /**
      * 查询待执行的检验单（check_order.status=1 且 order_type=2）
      */
@@ -277,5 +296,153 @@ public class LabReportServiceImpl implements LabReportService {
             report.setReportContent("{\"desc\":\"" + editedContent.replace("\"", "'").replace("\n", " ") + "\"}");
         }
         return labReportMapper.updateById(report) > 0;
+    }
+
+    @Override
+    public List<String> getAvailableIndicators(Long patientId) {
+        return labReportMapper.selectDistinctItems(patientId);
+    }
+
+    @Override
+    public Map<String, Object> getTrend(Long patientId, String indicator) {
+        List<LabReport> list = labReportMapper.selectList(
+                new LambdaQueryWrapper<LabReport>()
+                        .eq(LabReport::getPatientId, patientId)
+                        .like(LabReport::getItemName, indicator)
+                        .orderByAsc(LabReport::getCreateTime)
+        );
+
+        List<Map<String, Object>> history = new ArrayList<>();
+        for (LabReport l : list) {
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("date", l.getCreateTime().toString().substring(0, 10));
+            p.put("time", l.getCreateTime().toString());
+            p.put("value", parseDouble(l.getTestValue()));
+            p.put("abnormal", l.getAbnormalFlag() == 1);
+            p.put("referenceRange", l.getReferenceRange());
+            history.add(p);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("indicator", indicator);
+        result.put("patientId", patientId);
+        result.put("history", history);
+        result.put("count", history.size());
+
+        // ── 原来手写线性预测的部分整段删除，改成调用 Python 预测服务 ──
+        if (history.size() >= 2) {
+            String refRange = (String) history.get(0).get("referenceRange");
+            Map<String, Object> predictResult = callPythonPredictService(history, refRange, indicator);
+            if (predictResult != null) {
+                result.put("predictions", predictResult.get("predictions"));
+                result.put("trend", predictResult.get("trend"));
+                result.put("referenceRange", refRange);
+            }
+        }
+
+        return result;
+    }
+
+    /** 调用 Python FastAPI 的 /predict/trend 接口 */
+    private Map<String, Object> callPythonPredictService(
+            List<Map<String, Object>> history, String referenceRange, String indicator) {
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("history", history);
+            body.put("referenceRange", referenceRange);
+            body.put("indicator", indicator);
+            body.put("steps", 3);          // 需要预测几个点
+            body.put("granularity", "auto"); // 单次复查 / CGM 由 Python 侧根据采样间隔自动判断，也可显式传 "cgm" / "labtest"
+
+            ResponseEntity<Map> resp = restTemplate.postForEntity(
+                    pythonPredictServiceUrl + "/predict/trend",   // 配置到 application.yml
+                    body,
+                    Map.class
+            );
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                return (Map<String, Object>) resp.getBody().get("data");
+            }
+        } catch (Exception e) {
+            log.warn("调用Python预测服务失败，indicator={}, patientId history size={}",
+                    indicator, history.size(), e);
+        }
+        return null; // 失败时不返回 predictions，前端会显示"暂无该指标历史数据"之外的正常 history
+    }
+
+    // LabReportServiceImpl.java 里新增
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BatchLabReportCreateResponse batchCreate(BatchLabReportCreateRequest request) {
+        List<BatchLabReportCreateRequest.LabReportItem> items = request.getItems();
+        BatchLabReportCreateResponse response = new BatchLabReportCreateResponse();
+
+        if (items == null || items.isEmpty()) {
+            response.setSuccessCount(0);
+            response.setFailCount(0);
+            response.setFailReasons(Collections.emptyList());
+            return response;
+        }
+
+        List<LabReport> toInsert = new ArrayList<>();
+        List<String> failReasons = new ArrayList<>();
+
+        for (int i = 0; i < items.size(); i++) {
+            BatchLabReportCreateRequest.LabReportItem item = items.get(i);
+            try {
+                LabReport report = new LabReport();
+                report.setOrderId(item.getOrderId());
+                report.setOrderMainId(item.getOrderMainId());
+                report.setPatientId(item.getPatientId());
+                report.setItemName(item.getItemName());
+                report.setTestValue(item.getTestValue());
+                report.setReferenceRange(item.getReferenceRange());
+                report.setOperatorId(item.getOperatorId());
+
+                // description 没有独立字段，按你实体类约定拼成 JSON 存进 reportContent
+                Map<String, Object> contentMap = new HashMap<>();
+                contentMap.put("desc", item.getDescription() != null ? item.getDescription() : "");
+                report.setReportContent(objectMapper.writeValueAsString(contentMap));
+
+                report.setAbnormalFlag(judgeAbnormal(item.getTestValue(), item.getReferenceRange()) ? 1 : 0);
+                report.setAuditStatus(0); // 待审核
+
+                if (item.getTestTime() != null && !item.getTestTime().isEmpty()) {
+                    report.setCreateTime(LocalDateTime.parse(item.getTestTime()));
+                } else {
+                    report.setCreateTime(LocalDateTime.now());
+                }
+
+                toInsert.add(report);
+            } catch (Exception e) {
+                failReasons.add(String.format("第%d条数据处理失败：%s", i + 1, e.getMessage()));
+            }
+        }
+
+        int successCount = 0;
+        if (!toInsert.isEmpty()) {
+            boolean ok = saveBatch(toInsert, 200); // 直接调用父类 ServiceImpl 的方法，不要加 this 之外的前缀
+            if (ok) {
+                successCount = toInsert.size();
+            } else {
+                failReasons.add("批量写入数据库失败");
+            }
+        }
+
+        response.setSuccessCount(successCount);
+        response.setFailCount(items.size() - successCount);
+        response.setFailReasons(failReasons);
+        return response;
+    }
+
+    private boolean judgeAbnormal(String testValue, String referenceRange) {
+        try {
+            double val = Double.parseDouble(testValue.trim());
+            String[] parts = referenceRange.trim().split("-");
+            double lo = Double.parseDouble(parts[0].trim());
+            double hi = Double.parseDouble(parts[1].trim());
+            return val < lo || val > hi;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
