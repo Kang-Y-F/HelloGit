@@ -3,17 +3,13 @@ package com.neusoft.demo.service.serviceimpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.neusoft.demo.dto.BatchLabReportCreateRequest;
-import com.neusoft.demo.dto.BatchLabReportCreateResponse;
-import com.neusoft.demo.dto.LabReportDTO;
+import com.neusoft.demo.dto.*;
 import com.neusoft.demo.entity.CheckOrder;
 import com.neusoft.demo.entity.LabReport;
-import com.neusoft.demo.entity.MedicalOrder;
 import com.neusoft.demo.mapper.CheckOrderMapper;
 import com.neusoft.demo.mapper.LabReportMapper;
 import com.neusoft.demo.mapper.MedicalOrderMapper;
 import com.neusoft.demo.service.LabReportService;
-import com.neusoft.demo.vo.CheckOrderVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,261 +24,243 @@ import java.util.*;
 
 @Slf4j
 @Service
-public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport> implements LabReportService {
+public class LabReportServiceImpl
+        extends ServiceImpl<LabReportMapper, LabReport>
+        implements LabReportService {
 
     @Autowired private LabReportMapper    labReportMapper;
     @Autowired private CheckOrderMapper   checkOrderMapper;
     @Autowired private MedicalOrderMapper medicalOrderMapper;
     @Autowired private ChatClient         chatClient;
 
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final RestTemplate restTemplate;
+    @Value("${python.predict.service.url}")
+    private String pythonPredictServiceUrl;
 
-    // 推荐用构造器注入，而不是 @Autowired 字段注入，方便测试且不会出现循环依赖问题
     public LabReportServiceImpl(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
-    // application.yml 里配置 python.predict.service.url: http://127.0.0.1:8000
-    @Value("${python.predict.service.url}")
-    private String pythonPredictServiceUrl;
-    /**
-     * 查询待执行的检验单（check_order.status=1 且 order_type=2）
-     */
+    // ════════════════════════════════════════════════════════════
+    //  待执行检验单
+    // ════════════════════════════════════════════════════════════
+
     @Override
-    public List<CheckOrderVO> listPendingLabOrders(String keyword) {
-        // 复用 CheckOrderMapper 的联表查询，但这里需要 status=1 + orderType=2
-        // 直接用 selectPendingPayment 只查 status=0，所以这里自定义查询
+    public List<Map<String, Object>> listPendingLabOrders(String keyword) {
         return labReportMapper.selectPendingLabOrders(keyword);
     }
 
-    /**
-     * 录入检验报告
-     */
+    // ════════════════════════════════════════════════════════════
+    //  单项检验录入（兼容旧接口）
+    //  内部包装成单子项调用套餐接口，保持逻辑统一
+    // ════════════════════════════════════════════════════════════
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LabReport createReport(Long operatorId, LabReportDTO dto) {
+        LabReportSuiteDTO suiteDTO = new LabReportSuiteDTO();
+        suiteDTO.setCheckOrderId(dto.getCheckOrderId());
+        suiteDTO.setItemName(dto.getItemName());
 
-        // 1. 校验 check_order
+        LabReportSuiteDTO.SubItem sub = new LabReportSuiteDTO.SubItem();
+        sub.setSubItemName(null);               // 单项时 subItemName 为 null
+        sub.setTestValue(dto.getTestValue());
+        sub.setReferenceRange(dto.getReferenceRange());
+        sub.setDescription(dto.getDescription());
+        suiteDTO.setSubItems(List.of(sub));
+
+        List<LabReport> saved = createSuiteReport(operatorId, suiteDTO);
+        return saved.get(0);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  套餐检验录入（多子项 + 提交后同步AI解读）
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<LabReport> createSuiteReport(Long operatorId, LabReportSuiteDTO dto) {
+
+        // 1. 校验检验单
         CheckOrder checkOrder = checkOrderMapper.selectById(dto.getCheckOrderId());
-        if (checkOrder == null) {
+        if (checkOrder == null)
             throw new RuntimeException("检验单不存在: " + dto.getCheckOrderId());
-        }
-        if (checkOrder.getStatus() != 1 && checkOrder.getStatus() != 3) {
+        if (checkOrder.getStatus() != 1 && checkOrder.getStatus() != 3)
             throw new RuntimeException("该检验单状态异常，无法录入（当前状态：" + checkOrder.getStatus() + "）");
+
+        boolean isSuite = dto.getSubItems().size() > 1;
+        // 套餐用同一个 suiteGroup；单项直接用 null
+        String suiteGroup = isSuite
+                ? UUID.randomUUID().toString().replace("-", "").substring(0, 16)
+                : null;
+
+        List<LabReport> saved = new ArrayList<>();
+
+        // 2. 逐子项写库
+        for (LabReportSuiteDTO.SubItem sub : dto.getSubItems()) {
+            LabReport report = new LabReport();
+            report.setOrderId(dto.getCheckOrderId());
+            report.setOrderMainId(checkOrder.getOrderId());
+            report.setPatientId(checkOrder.getUserId());
+            report.setItemName(dto.getItemName());
+            report.setSubItemName(sub.getSubItemName());
+            report.setTestValue(sub.getTestValue());
+            report.setReferenceRange(sub.getReferenceRange());
+            report.setAbnormalFlag(isAbnormal(sub.getTestValue(), sub.getReferenceRange()) ? 1 : 0);
+            report.setAuditStatus(0);
+            report.setOperatorId(operatorId);
+            report.setSuiteGroup(suiteGroup);
+            report.setCreateTime(LocalDateTime.now());
+
+            // 描述存入 report_content（description 字段不在实体里）
+            if (sub.getDescription() != null && !sub.getDescription().isBlank()) {
+                report.setReportContent(toReportContent(sub.getDescription()));
+            }
+
+            labReportMapper.insert(report);
+            saved.add(report);
         }
 
-        // 2. 自动判断异常
-        int abnormalFlag = isAbnormal(dto.getTestValue(), dto.getReferenceRange()) ? 1 : 0;
-
-        // 3. 写 lab_report
-        LabReport report = new LabReport();
-        report.setOrderId(dto.getCheckOrderId());
-        report.setOrderMainId(checkOrder.getOrderId());  // medical_order.id
-        report.setPatientId(checkOrder.getUserId());
-        report.setItemName(dto.getItemName());
-        report.setTestValue(dto.getTestValue());
-        report.setReferenceRange(dto.getReferenceRange());
-        report.setAbnormalFlag(abnormalFlag);
-        report.setAuditStatus(0);  // 待审核
-        report.setOperatorId(operatorId);
-        report.setCreateTime(LocalDateTime.now());
-
-        // 组装 report_content
-        if (dto.getDescription() != null && !dto.getDescription().isBlank()) {
-            report.setReportContent("{\"desc\":\"" + dto.getDescription().replace("\"", "'") + "\"}");
-        }
-
-        labReportMapper.insert(report);
-
-        // 4. 更新 check_order.status = 4（已完成）
+        // 3. 更新检验单状态
         checkOrderMapper.updateStatus(checkOrder.getId(), 4);
-
-        // 5. 更新 medical_order.exec_status = 2（已完成）
-        if (checkOrder.getOrderId() != null) {
+        if (checkOrder.getOrderId() != null)
             medicalOrderMapper.updateExecStatus(checkOrder.getOrderId(), 2);
+
+        // 4. 提交后同步触发 AI 解读
+        //    AI 结果存在第一条记录的 report_content 里，其他子项通过 suite_group 共享
+        try {
+            String aiResult = generateSuiteAiSummary(
+                    saved, checkOrder.getUserId(), dto.getItemName());
+            LabReport first = saved.get(0);
+            first.setReportContent(toReportContent(aiResult));
+            labReportMapper.updateById(first);
+            // 让调用方能直接拿到 AI 结果，不需要再查库
+            first.setReportContent(toReportContent(aiResult));
+        } catch (Exception e) {
+            log.warn("AI解读生成失败，suiteGroup={}, itemName={}",
+                    suiteGroup, dto.getItemName(), e);
+            // AI 失败不影响录入成功，前端可以手动点"AI解读"重新生成
         }
 
-        return report;
+        return saved;
     }
 
-    /**
-     * 审核检验报告
-     */
-    @Override
-    public boolean auditReport(Long reportId, Integer auditStatus) {
-        LabReport report = labReportMapper.selectById(reportId);
-        if (report == null) return false;
+    // ════════════════════════════════════════════════════════════
+    //  AI 解读（套餐综合解读，内部方法）
+    // ════════════════════════════════════════════════════════════
 
-        report.setAuditStatus(auditStatus);
-        return labReportMapper.updateById(report) > 0;
+    private String generateSuiteAiSummary(
+            List<LabReport> subItems, Long patientId, String suiteName) {
+
+        // 拼当前各子项结果
+        StringBuilder current = new StringBuilder();
+        for (LabReport r : subItems) {
+            String label = r.getSubItemName() != null ? r.getSubItemName() : r.getItemName();
+            current.append(String.format("  %s：%s（参考 %s，%s）\n",
+                    label, r.getTestValue(), r.getReferenceRange(),
+                    r.getAbnormalFlag() == 1 ? "⚠异常" : "正常"));
+        }
+
+        // 查该患者同一套餐最近历史（最多15条子项记录 ≈ 3次复查）
+        List<LabReport> history = labReportMapper.selectList(
+                new LambdaQueryWrapper<LabReport>()
+                        .eq(LabReport::getPatientId, patientId)
+                        .eq(LabReport::getItemName, suiteName)
+                        .orderByDesc(LabReport::getCreateTime)
+                        .last("LIMIT 15"));
+
+        StringBuilder histInfo = new StringBuilder();
+        if (history.isEmpty()) {
+            histInfo.append("该患者首次进行本套餐检验，无历史对比数据。\n");
+        } else {
+            for (LabReport h : history) {
+                String label = h.getSubItemName() != null ? h.getSubItemName() : h.getItemName();
+                histInfo.append(String.format("  %s %s：%s（%s）\n",
+                        h.getCreateTime().toString().substring(0, 10),
+                        label, h.getTestValue(),
+                        h.getAbnormalFlag() == 1 ? "⚠异常" : "正常"));
+            }
+        }
+
+        String prompt = String.format("""
+                你是专业检验医学AI助手，请对以下检验结果做综合临床解读。
+                
+                检验套餐：%s
+                
+                本次结果：
+                %s
+                历史记录（供对比）：
+                %s
+                
+                输出要求：
+                1. 各异常项的临床意义（只说异常项，正常项一句带过）
+                2. 整组指标的综合判断
+                3. 随访/复查/进一步检查建议
+                
+                要求：简洁专业，不超过200字，使用纯文本无需 Markdown。
+                """, suiteName, current, histInfo);
+
+        return chatClient.prompt().user(prompt).call().content();
     }
 
-    /**
-     * 按患者查询
-     */
-    @Override
-    public List<LabReport> listByPatient(Long patientId) {
-        return labReportMapper.selectList(
-            new LambdaQueryWrapper<LabReport>()
-                .eq(LabReport::getPatientId, patientId)
-                .orderByDesc(LabReport::getCreateTime)
-        );
-    }
+    // ════════════════════════════════════════════════════════════
+    //  手动触发 AI 解读（已录入记录，前端点"AI解读"按钮时调用）
+    // ════════════════════════════════════════════════════════════
 
-    /**
-     * AI 异常解读
-     * 对单条检验报告做解读，生成临床意义描述
-     */
     @Override
     public String generateAiSummary(Long reportId) {
         LabReport report = labReportMapper.selectById(reportId);
         if (report == null) throw new RuntimeException("检验报告不存在");
 
-        // 查该患者所有检验报告（用于综合判断）
-        List<LabReport> allLabs = labReportMapper.selectList(
-            new LambdaQueryWrapper<LabReport>()
-                .eq(LabReport::getPatientId, report.getPatientId())
-                .orderByDesc(LabReport::getCreateTime)
-                .last("LIMIT 10")
-        );
-
-        StringBuilder labInfo = new StringBuilder();
-        for (LabReport l : allLabs) {
-            labInfo.append(String.format("%s：%s（参考范围 %s，%s）\n",
-                l.getItemName(), l.getTestValue(), l.getReferenceRange(),
-                l.getAbnormalFlag() == 1 ? "⚠异常" : "正常"));
+        // 如果是套餐，取同组所有子项一起解读
+        List<LabReport> subItems;
+        if (report.getSuiteGroup() != null) {
+            subItems = labReportMapper.selectList(
+                    new LambdaQueryWrapper<LabReport>()
+                            .eq(LabReport::getSuiteGroup, report.getSuiteGroup())
+                            .orderByAsc(LabReport::getId));
+        } else {
+            subItems = List.of(report);
         }
 
-        String prompt = String.format("""
-            你是一名专业的检验医学AI助手。请对以下检验指标做临床解读。
-            
-            当前关注指标：%s = %s（参考范围 %s）
-            
-            该患者全部检验结果：
-            %s
-            
-            请输出：
-            1. 该指标当前值的临床意义（1-2句话）
-            2. 结合其他指标的综合判断（如有异常组合模式则指出）
-            3. 建议（是否需要复查或进一步检查）
-            
-            要求：简洁专业，不超过150字。
-            """,
-            report.getItemName(), report.getTestValue(),
-            report.getReferenceRange(), labInfo
-        );
-
         try {
-            String result = chatClient.prompt().user(prompt).call().content();
-
-            // 写入 report_content
-            report.setReportContent("{\"desc\":\"" + result.replace("\"", "'").replace("\n", " ") + "\"}");
+            String aiResult = generateSuiteAiSummary(
+                    subItems, report.getPatientId(), report.getItemName());
+            // 写入第一条（对套餐而言是 reportId 指向的那条，对单项就是它自己）
+            report.setReportContent(toReportContent(aiResult));
             labReportMapper.updateById(report);
-
-            return result;
+            return aiResult;
         } catch (Exception e) {
-            log.error("AI检验解读失败 reportId={}", reportId, e);
+            log.error("AI解读失败 reportId={}", reportId, e);
             throw new RuntimeException("AI服务暂时不可用");
         }
     }
 
-    /**
-     * 血糖趋势预测
-     * 查询患者历史血糖数据，调用 Python 服务做时序预测
-     * 如果 Python 服务不可用，则仅返回历史数据 + 简单趋势
-     */
+    // ════════════════════════════════════════════════════════════
+    //  审核 / 修改后确认
+    // ════════════════════════════════════════════════════════════
+
     @Override
-    public Map<String, Object> predictBloodSugar(Long patientId) {
+    public boolean auditReport(Long reportId, Integer auditStatus) {
+        LabReport report = labReportMapper.selectById(reportId);
+        if (report == null) return false;
 
-        // 查历史血糖相关指标
-        List<LabReport> glucoseList = labReportMapper.selectList(
-            new LambdaQueryWrapper<LabReport>()
-                .eq(LabReport::getPatientId, patientId)
-                .like(LabReport::getItemName, "血糖")
-                .orderByAsc(LabReport::getCreateTime)
-        );
-
-        List<Map<String, Object>> history = new ArrayList<>();
-        for (LabReport l : glucoseList) {
-            Map<String, Object> point = new LinkedHashMap<>();
-            point.put("date", l.getCreateTime().toString().substring(0, 10));
-            point.put("value", parseDouble(l.getTestValue()));
-            point.put("abnormal", l.getAbnormalFlag() == 1);
-            history.add(point);
+        // 套餐场景：同步更新同组所有子项的审核状态，保持一致
+        if (report.getSuiteGroup() != null) {
+            List<LabReport> siblings = labReportMapper.selectList(
+                    new LambdaQueryWrapper<LabReport>()
+                            .eq(LabReport::getSuiteGroup, report.getSuiteGroup()));
+            for (LabReport s : siblings) {
+                s.setAuditStatus(auditStatus);
+                labReportMapper.updateById(s);
+            }
+            return true;
         }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("patientId", patientId);
-        result.put("history", history);
-        result.put("count", history.size());
-
-        // 尝试调用 Python 预测服务
-        try {
-            // TODO: 调用 Python 服务 POST http://localhost:5000/predict/blood-sugar
-            // RestTemplate / WebClient 调用，传入历史数据，拿回预测曲线
-            // 暂时用简单线性趋势替代
-
-            if (history.size() >= 2) {
-                double last = (double) history.get(history.size() - 1).get("value");
-                double prev = (double) history.get(history.size() - 2).get("value");
-                double trend = last - prev;
-                String riskLevel = last > 7.0 ? "偏高风险" : (last > 6.1 ? "临界关注" : "正常范围");
-
-                result.put("lastValue", last);
-                result.put("trend", trend > 0 ? "上升" : (trend < 0 ? "下降" : "平稳"));
-                result.put("trendValue", Math.round(trend * 100.0) / 100.0);
-                result.put("riskLevel", riskLevel);
-                result.put("predictedNext", Math.round((last + trend) * 100.0) / 100.0);
-                result.put("source", "simple_linear");
-            } else {
-                result.put("riskLevel", "数据不足");
-                result.put("source", "insufficient_data");
-            }
-        } catch (Exception e) {
-            log.warn("血糖预测失败", e);
-            result.put("riskLevel", "预测服务不可用");
-            result.put("source", "error");
-        }
-
-        return result;
-    }
-
-    // ── 工具方法 ──────────────────────────────────────────────
-
-    /**
-     * 简单判断是否异常：解析参考范围如 "4.0-10.0"，判断检测值是否在范围内
-     */
-    private boolean isAbnormal(String testValue, String referenceRange) {
-        try {
-            double val = Double.parseDouble(testValue.trim());
-            if (referenceRange != null && referenceRange.contains("-")) {
-                String[] parts = referenceRange.split("-");
-                double low  = Double.parseDouble(parts[0].trim());
-                double high = Double.parseDouble(parts[1].trim());
-                return val < low || val > high;
-            }
-        } catch (Exception ignored) {}
-        return false;  // 无法判断时默认正常
-    }
-
-    private double parseDouble(String s) {
-        try { return Double.parseDouble(s.trim()); }
-        catch (Exception e) { return 0.0; }
-    }
-
-    /**
-     * 查询当前操作员今日录入的检验报告
-     */
-    @Override
-    public List<LabReport> listTodayByOperator(Long operatorId) {
-        return labReportMapper.selectList(
-                new LambdaQueryWrapper<LabReport>()
-                        .eq(LabReport::getOperatorId, operatorId)
-                        .apply("DATE(create_time) = CURDATE()")
-                        .orderByDesc(LabReport::getCreateTime)
-        );
+        report.setAuditStatus(auditStatus);
+        return labReportMapper.updateById(report) > 0;
     }
 
     @Override
@@ -292,10 +270,43 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
 
         report.setAuditStatus(auditStatus);
         if (editedContent != null && !editedContent.isBlank()) {
-            // 把修改后的内容写入 report_content（覆盖AI原始解读）
-            report.setReportContent("{\"desc\":\"" + editedContent.replace("\"", "'").replace("\n", " ") + "\"}");
+            report.setReportContent(toReportContent(editedContent));
         }
+
+        // 同步更新同组其他子项的审核状态
+        if (report.getSuiteGroup() != null) {
+            labReportMapper.selectList(
+                            new LambdaQueryWrapper<LabReport>()
+                                    .eq(LabReport::getSuiteGroup, report.getSuiteGroup())
+                                    .ne(LabReport::getId, reportId))
+                    .forEach(s -> {
+                        s.setAuditStatus(auditStatus);
+                        labReportMapper.updateById(s);
+                    });
+        }
+
         return labReportMapper.updateById(report) > 0;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  查询类
+    // ════════════════════════════════════════════════════════════
+
+    @Override
+    public List<LabReport> listByPatient(Long patientId) {
+        return labReportMapper.selectList(
+                new LambdaQueryWrapper<LabReport>()
+                        .eq(LabReport::getPatientId, patientId)
+                        .orderByDesc(LabReport::getCreateTime));
+    }
+
+    @Override
+    public List<LabReport> listTodayByOperator(Long operatorId) {
+        return labReportMapper.selectList(
+                new LambdaQueryWrapper<LabReport>()
+                        .eq(LabReport::getOperatorId, operatorId)
+                        .apply("DATE(create_time) = CURDATE()")
+                        .orderByDesc(LabReport::getCreateTime));
     }
 
     @Override
@@ -303,14 +314,17 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
         return labReportMapper.selectDistinctItems(patientId);
     }
 
+    // ════════════════════════════════════════════════════════════
+    //  趋势预测（调用 Python 服务）
+    // ════════════════════════════════════════════════════════════
+
     @Override
     public Map<String, Object> getTrend(Long patientId, String indicator) {
         List<LabReport> list = labReportMapper.selectList(
                 new LambdaQueryWrapper<LabReport>()
                         .eq(LabReport::getPatientId, patientId)
                         .like(LabReport::getItemName, indicator)
-                        .orderByAsc(LabReport::getCreateTime)
-        );
+                        .orderByAsc(LabReport::getCreateTime));
 
         List<Map<String, Object>> history = new ArrayList<>();
         for (LabReport l : list) {
@@ -320,6 +334,7 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
             p.put("value", parseDouble(l.getTestValue()));
             p.put("abnormal", l.getAbnormalFlag() == 1);
             p.put("referenceRange", l.getReferenceRange());
+            p.put("subItemName", l.getSubItemName());
             history.add(p);
         }
 
@@ -329,10 +344,10 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
         result.put("history", history);
         result.put("count", history.size());
 
-        // ── 原来手写线性预测的部分整段删除，改成调用 Python 预测服务 ──
         if (history.size() >= 2) {
             String refRange = (String) history.get(0).get("referenceRange");
-            Map<String, Object> predictResult = callPythonPredictService(history, refRange, indicator);
+            Map<String, Object> predictResult =
+                    callPythonPredictService(history, refRange, indicator);
             if (predictResult != null) {
                 result.put("predictions", predictResult.get("predictions"));
                 result.put("trend", predictResult.get("trend"));
@@ -343,7 +358,6 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
         return result;
     }
 
-    /** 调用 Python FastAPI 的 /predict/trend 接口 */
     private Map<String, Object> callPythonPredictService(
             List<Map<String, Object>> history, String referenceRange, String indicator) {
         try {
@@ -351,25 +365,24 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
             body.put("history", history);
             body.put("referenceRange", referenceRange);
             body.put("indicator", indicator);
-            body.put("steps", 3);          // 需要预测几个点
-            body.put("granularity", "auto"); // 单次复查 / CGM 由 Python 侧根据采样间隔自动判断，也可显式传 "cgm" / "labtest"
+            body.put("steps", 3);
+            body.put("granularity", "auto");
 
             ResponseEntity<Map> resp = restTemplate.postForEntity(
-                    pythonPredictServiceUrl + "/predict/trend",   // 配置到 application.yml
-                    body,
-                    Map.class
-            );
+                    pythonPredictServiceUrl + "/predict/trend", body, Map.class);
             if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
                 return (Map<String, Object>) resp.getBody().get("data");
             }
         } catch (Exception e) {
-            log.warn("调用Python预测服务失败，indicator={}, patientId history size={}",
-                    indicator, history.size(), e);
+            log.warn("调用Python预测服务失败，indicator={}", indicator, e);
         }
-        return null; // 失败时不返回 predictions，前端会显示"暂无该指标历史数据"之外的正常 history
+        return null;
     }
 
-    // LabReportServiceImpl.java 里新增
+    // ════════════════════════════════════════════════════════════
+    //  批量写入（CGM/HL7仿真数据）
+    // ════════════════════════════════════════════════════════════
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BatchLabReportCreateResponse batchCreate(BatchLabReportCreateRequest request) {
@@ -390,21 +403,26 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
             BatchLabReportCreateRequest.LabReportItem item = items.get(i);
             try {
                 LabReport report = new LabReport();
-                report.setOrderId(item.getOrderId());
-                report.setOrderMainId(item.getOrderMainId());
+                Long checkOrderId = item.getOrderId();
+                report.setOrderId(checkOrderId);
+                CheckOrder checkOrder = checkOrderMapper.selectById(checkOrderId);
+                if (checkOrder == null) {
+                    throw new RuntimeException("检验单ID[" + checkOrderId + "]不存在");
+                }
+                report.setOrderMainId(checkOrder.getOrderId());
                 report.setPatientId(item.getPatientId());
                 report.setItemName(item.getItemName());
+                report.setSuiteGroup(item.getSuiteGroup());
+                report.setSubItemName(item.getSubItemName());
                 report.setTestValue(item.getTestValue());
                 report.setReferenceRange(item.getReferenceRange());
                 report.setOperatorId(item.getOperatorId());
+                report.setAbnormalFlag(judgeAbnormal(item.getTestValue(), item.getReferenceRange()) ? 1 : 0);
+                report.setAuditStatus(0);
 
-                // description 没有独立字段，按你实体类约定拼成 JSON 存进 reportContent
                 Map<String, Object> contentMap = new HashMap<>();
                 contentMap.put("desc", item.getDescription() != null ? item.getDescription() : "");
                 report.setReportContent(objectMapper.writeValueAsString(contentMap));
-
-                report.setAbnormalFlag(judgeAbnormal(item.getTestValue(), item.getReferenceRange()) ? 1 : 0);
-                report.setAuditStatus(0); // 待审核
 
                 if (item.getTestTime() != null && !item.getTestTime().isEmpty()) {
                     report.setCreateTime(LocalDateTime.parse(item.getTestTime()));
@@ -420,12 +438,9 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
 
         int successCount = 0;
         if (!toInsert.isEmpty()) {
-            boolean ok = saveBatch(toInsert, 200); // 直接调用父类 ServiceImpl 的方法，不要加 this 之外的前缀
-            if (ok) {
-                successCount = toInsert.size();
-            } else {
-                failReasons.add("批量写入数据库失败");
-            }
+            boolean ok = saveBatch(toInsert, 200);
+            if (ok) successCount = toInsert.size();
+            else failReasons.add("批量写入数据库失败");
         }
 
         response.setSuccessCount(successCount);
@@ -434,15 +449,34 @@ public class LabReportServiceImpl extends ServiceImpl<LabReportMapper, LabReport
         return response;
     }
 
-    private boolean judgeAbnormal(String testValue, String referenceRange) {
+    // ════════════════════════════════════════════════════════════
+    //  工具方法
+    // ════════════════════════════════════════════════════════════
+
+    private boolean isAbnormal(String testValue, String referenceRange) {
         try {
             double val = Double.parseDouble(testValue.trim());
-            String[] parts = referenceRange.trim().split("-");
-            double lo = Double.parseDouble(parts[0].trim());
-            double hi = Double.parseDouble(parts[1].trim());
-            return val < lo || val > hi;
-        } catch (Exception e) {
-            return false;
-        }
+            if (referenceRange != null && referenceRange.contains("-")) {
+                String[] parts = referenceRange.split("-");
+                double lo = Double.parseDouble(parts[0].trim());
+                double hi = Double.parseDouble(parts[1].trim());
+                return val < lo || val > hi;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean judgeAbnormal(String testValue, String referenceRange) {
+        return isAbnormal(testValue, referenceRange);
+    }
+
+    private double parseDouble(String s) {
+        try { return Double.parseDouble(s.trim()); }
+        catch (Exception e) { return 0.0; }
+    }
+
+    /** 把文本包装成 report_content JSON格式 */
+    private String toReportContent(String text) {
+        return "{\"desc\":\"" + text.replace("\"", "'").replace("\n", " ") + "\"}";
     }
 }

@@ -11,6 +11,8 @@ public class BatchLabReportCreateRequest {
     public static class LabReportItem {
         private Long orderId;          // 对应 check_order.id，原来写成 checkOrderId 是错的
         private Long orderMainId;      // 对应 medical_order.id，可选
+        private String suiteGroup;
+        private String subItemName;
         private Long patientId;        // 必传，后续趋势/CGM查询都靠这个
         private String itemName;
         private String testValue;

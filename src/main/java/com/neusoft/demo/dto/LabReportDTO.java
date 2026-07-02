@@ -22,4 +22,6 @@ public class LabReportDTO {
 
     /** 详细描述 */
     private String description;
+
+    private String aiContent;
 }
