@@ -54,53 +54,54 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
      *   - 单项行：id 各不相同                   → 各自独立一张卡片
      */
     @Select("""
-        SELECT
-            MIN(lr.id)                                    AS id,
-            lr.suite_group,
-            lr.patient_id,
-            lr.order_id,
-            lr.item_name,
-            -- 异常标志：套餐中任一子项异常则整张卡片标异常
-            MAX(lr.abnormal_flag)                         AS abnormal_flag,
-            -- 审核状态：取第一条记录的状态（套餐共享）
-            MIN(lr.audit_status)                          AS audit_status,
-            -- AI解读：存在第一条记录的 report_content 里
-            (SELECT report_content
-             FROM   lab_report
-             WHERE  id = MIN(lr.id))                      AS report_content,
-            MIN(lr.create_time)                           AS create_time,
-            -- 检测值展示：
-            --   单项 → 直接显示检测值
-            --   套餐 → 拼接"子项名:值"列表，前端按 \\n 拆分渲染
-            CASE
-                WHEN lr.suite_group IS NULL
-                THEN MIN(lr.test_value)
-                ELSE GROUP_CONCAT(
-                         CONCAT(COALESCE(lr.sub_item_name, lr.item_name), ':', lr.test_value)
-                         ORDER BY lr.id
-                         SEPARATOR '\\n'
-                     )
-            END                                           AS test_value,
-            -- 参考范围：单项显示自身范围，套餐显示第一条（前端可自行解析）
-            MIN(lr.reference_range)                       AS reference_range,
-            -- 子项数量（前端判断是否是套餐）
-            COUNT(*)                                      AS sub_item_count,
-            p.name                                        AS patient_name
-        FROM  lab_report  lr
-        LEFT JOIN pmi_patient p ON p.id = lr.patient_id
-        WHERE lr.operator_id = #{operatorId}
-          AND DATE(lr.create_time) = CURDATE()
-        GROUP BY
-            COALESCE(lr.suite_group, CAST(lr.id AS CHAR)),
-            lr.suite_group,
-            lr.patient_id,
-            lr.order_id,
-            lr.item_name,
-            p.name
-        ORDER BY MIN(lr.create_time) DESC
-        """)
+    SELECT
+        MIN(lr.id)                                    AS id,
+        lr.suite_group,
+        lr.patient_id,
+        lr.order_id,
+        lr.item_name,
+        MAX(lr.abnormal_flag)                         AS abnormal_flag,
+        MIN(lr.audit_status)                          AS audit_status,
+        (SELECT report_content
+         FROM   lab_report
+         WHERE  id = MIN(lr.id))                      AS report_content,
+        MIN(lr.create_time)                           AS create_time,
+        CASE
+            -- 单项：直接显示检测值
+            WHEN lr.suite_group IS NULL
+            THEN MIN(lr.test_value)
+            -- 真正多指标套餐（sub_item_name 有实际值且互不相同）：拼接"子项名:值"
+            WHEN MAX(CASE WHEN lr.sub_item_name IS NOT NULL THEN 1 ELSE 0 END) = 1
+            THEN GROUP_CONCAT(
+                     CONCAT(COALESCE(lr.sub_item_name, lr.item_name), ':', lr.test_value)
+                     ORDER BY lr.id
+                     SEPARATOR '\\n'
+                 )
+            -- 同名多时间点（CGM/动态监测）：只取最新一个点的值
+            ELSE SUBSTRING_INDEX(
+                     GROUP_CONCAT(lr.test_value ORDER BY lr.create_time DESC),
+                     ',', 1
+                 )
+        END                                           AS test_value,
+        MIN(lr.reference_range)                       AS reference_range,
+        COUNT(*)                                       AS sub_item_count,
+        -- 新增：标记这一组是不是"同名多时间点"类型（CGM/动态监测），前端据此区分展示
+        MAX(CASE WHEN lr.sub_item_name IS NULL AND lr.suite_group IS NOT NULL THEN 1 ELSE 0 END) AS is_timeseries,
+        p.name                                        AS patient_name
+    FROM  lab_report  lr
+    LEFT JOIN pmi_patient p ON p.id = lr.patient_id
+    WHERE lr.operator_id = #{operatorId}
+      AND DATE(lr.create_time) = CURDATE()
+    GROUP BY
+        COALESCE(lr.suite_group, CAST(lr.id AS CHAR)),
+        lr.suite_group,
+        lr.patient_id,
+        lr.order_id,
+        lr.item_name,
+        p.name
+    ORDER BY MIN(lr.create_time) DESC
+    """)
     List<Map<String, Object>> selectTodayWithPatient(@Param("operatorId") Long operatorId);
-
     /**
      * 查询患者有历史记录的检验项目（去重）
      */

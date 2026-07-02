@@ -21,6 +21,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -128,20 +129,23 @@ public class LabReportServiceImpl
         if (checkOrder.getOrderId() != null)
             medicalOrderMapper.updateExecStatus(checkOrder.getOrderId(), 2);
 
-        // 4. 提交后同步触发 AI 解读
+        // 4. AI 解读：前端已确认的文本直接存；没传才兜底调 AI 生成
         //    AI 结果存在第一条记录的 report_content 里，其他子项通过 suite_group 共享
-        try {
-            String aiResult = generateSuiteAiSummary(
-                    saved, checkOrder.getUserId(), dto.getItemName());
-            LabReport first = saved.get(0);
-            first.setReportContent(toReportContent(aiResult));
+        LabReport first = saved.get(0);
+        if (dto.getAiContent() != null && !dto.getAiContent().isBlank()) {
+            // 用户在预览面板里已经看过并确认（或编辑）过的文本，直接落库，不再重复调 AI
+            first.setReportContent(toReportContent(dto.getAiContent()));
             labReportMapper.updateById(first);
-            // 让调用方能直接拿到 AI 结果，不需要再查库
-            first.setReportContent(toReportContent(aiResult));
-        } catch (Exception e) {
-            log.warn("AI解读生成失败，suiteGroup={}, itemName={}",
-                    suiteGroup, dto.getItemName(), e);
-            // AI 失败不影响录入成功，前端可以手动点"AI解读"重新生成
+        } else {
+            // 前端没传确认文本（比如用户没等 AI 生成完就直接提交了）——兜底自动生成，保证不会空着
+            try {
+                String aiResult = generateSuiteAiSummary(saved, checkOrder.getUserId(), dto.getItemName());
+                first.setReportContent(toReportContent(aiResult));
+                labReportMapper.updateById(first);
+            } catch (Exception e) {
+                log.warn("AI解读兜底生成失败，suiteGroup={}, itemName={}", suiteGroup, dto.getItemName(), e);
+                // AI 失败不影响录入成功，前端可以手动点"AI解读"重新生成
+            }
         }
 
         return saved;
@@ -203,6 +207,51 @@ public class LabReportServiceImpl
                 """, suiteName, current, histInfo);
 
         return chatClient.prompt().user(prompt).call().content();
+    }
+
+    @Override
+    public String generateAiPreview(AiPreviewRequest req) {
+        List<LabReport> tempReports;
+        if (req.getSubItems() != null && !req.getSubItems().isEmpty()) {
+            tempReports = req.getSubItems().stream().map(si -> {
+                LabReport r = new LabReport();
+                r.setPatientId(req.getPatientId());
+                r.setItemName(req.getItemName());
+                r.setSubItemName(si.getSubItemName());
+                r.setTestValue(si.getTestValue());
+                r.setReferenceRange(si.getReferenceRange());
+                r.setAbnormalFlag(calcAbnormalFlag(si.getTestValue(), si.getReferenceRange()));
+                return r;
+            }).collect(Collectors.toList());
+        } else {
+            LabReport tempReport = new LabReport();
+            tempReport.setPatientId(req.getPatientId());
+            tempReport.setItemName(req.getItemName());
+            tempReport.setTestValue(req.getTestValue());
+            tempReport.setReferenceRange(req.getReferenceRange());
+            tempReport.setAbnormalFlag(calcAbnormalFlag(req.getTestValue(), req.getReferenceRange()));
+            tempReports = List.of(tempReport);
+        }
+
+        try {
+            return generateSuiteAiSummary(tempReports, req.getPatientId(), req.getItemName());
+        } catch (Exception e) {
+            log.error("AI预判失败 itemName={}", req.getItemName(), e);
+            throw new RuntimeException("AI服务暂时不可用");
+        }
+    }
+
+    private Integer calcAbnormalFlag(String testValue, String referenceRange) {
+        try {
+            if (referenceRange != null && referenceRange.contains("-")) {
+                String[] parts = referenceRange.split("-");
+                double lo = Double.parseDouble(parts[0].trim());
+                double hi = Double.parseDouble(parts[1].trim());
+                double val = Double.parseDouble(testValue.trim());
+                return (val < lo || val > hi) ? 1 : 0;
+            }
+        } catch (Exception ignored) {}
+        return 0;
     }
 
     // ════════════════════════════════════════════════════════════
@@ -317,7 +366,8 @@ public class LabReportServiceImpl
     // ════════════════════════════════════════════════════════════
     //  趋势预测（调用 Python 服务）
     // ════════════════════════════════════════════════════════════
-
+    private static final Set<String> CONTINUOUS_MONITORING_INDICATORS =
+            Set.of("动态血糖", "动态血压");
     @Override
     public Map<String, Object> getTrend(Long patientId, String indicator, String subItem) {
         String effectiveSubItem = subItem;
@@ -360,7 +410,9 @@ public class LabReportServiceImpl
         result.put("history", history);
         result.put("count", history.size());
 
-        if (history.size() >= 2) {
+        // 只有"动态监测类"项目才调用预测服务，普通周期复查项目不预测
+        boolean needsPrediction = CONTINUOUS_MONITORING_INDICATORS.contains(indicator);
+        if (needsPrediction && history.size() >= 2) {
             String refRange = (String) history.get(0).get("referenceRange");
             Map<String, Object> predictResult = callPythonPredictService(history, refRange, indicator);
             if (predictResult != null) {

@@ -123,6 +123,16 @@ public class LabReportController {
             return Result.fail(e.getMessage());
         }
     }
+    // ── AI 解读预判（录入前，不落库） ──────────────────────
+    @PostMapping("/ai-preview")
+    public Result<?> aiPreview(@RequestBody AiPreviewRequest req) {
+        try {
+            String preview = labReportService.generateAiPreview(req);
+            return Result.success(preview);
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
 
     // ── 单条报告详情 ─────────────────────────────────────────
     @GetMapping("/detail/{id}")
@@ -160,17 +170,20 @@ public class LabReportController {
     }
 
     // ── HL7仿真：Java转发给Python ─────────────────────────────
-    @PostMapping("/hl7-sim/cgm-series")
-    public Result<?> simulateCgmSeries(@RequestBody Map<String, Object> body) {
-        // patientId/checkOrderId 确保是字符串类型（Python Pydantic str字段要求）
+    @PostMapping("/hl7-sim/cgm-preview")
+    public Result<?> previewCgmSeries(@RequestBody Map<String, Object> body) {
         if (body.containsKey("patientId"))
             body.put("patientId", String.valueOf(body.get("patientId")));
         if (body.containsKey("checkOrderId"))
             body.put("checkOrderId", String.valueOf(body.get("checkOrderId")));
 
         Map<?, ?> pythonResp = restTemplate.postForObject(
-                pythonBaseUrl + "/hl7-sim/cgm-series", body, Map.class);
-        return Result.success(pythonResp);
+                pythonBaseUrl + "/hl7-sim/cgm-preview", body, Map.class);
+
+        // Python 返回的是 {code, message, data:{...}}，只把 data 那层取出来往上抛，
+        // 避免前端要多剥一层
+        Object data = pythonResp != null ? pythonResp.get("data") : null;
+        return Result.success(data);
     }
 
     // ── 工具：从JWT解析操作员ID ──────────────────────────────

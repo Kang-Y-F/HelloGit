@@ -1,9 +1,6 @@
 package com.neusoft.demo.service;
 
-import com.neusoft.demo.dto.BatchLabReportCreateRequest;
-import com.neusoft.demo.dto.BatchLabReportCreateResponse;
-import com.neusoft.demo.dto.LabReportDTO;
-import com.neusoft.demo.dto.LabReportSuiteDTO;
+import com.neusoft.demo.dto.*;
 import com.neusoft.demo.entity.LabReport;
 import com.neusoft.demo.vo.CheckOrderVO;
 import java.util.List;
@@ -34,6 +31,8 @@ public interface LabReportService {
 
     /** 对已录入的单条报告触发AI解读（用于手动重新解读） */
     String generateAiSummary(Long reportId);
+
+    String generateAiPreview(AiPreviewRequest req);
 
     /** 获取患者所有有历史记录的指标名列表 */
     List<String> getAvailableIndicators(Long patientId);

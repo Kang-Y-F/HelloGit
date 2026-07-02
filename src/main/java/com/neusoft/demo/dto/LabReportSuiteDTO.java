@@ -19,6 +19,8 @@ public class LabReportSuiteDTO {
     /** 各子项结果列表 */
     private List<SubItem> subItems;
 
+    private String aiContent;
+
     @Data
     public static class SubItem {
         /** 子项名称，如"肌酐"；单指标时等于 itemName */
