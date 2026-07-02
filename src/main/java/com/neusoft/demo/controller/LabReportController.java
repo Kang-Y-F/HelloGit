@@ -147,8 +147,9 @@ public class LabReportController {
     // ── 指标历史趋势 + Python预测 ─────────────────────────────
     @GetMapping("/trend/{patientId}")
     public Result<?> trend(@PathVariable Long patientId,
-                           @RequestParam String indicator) {
-        return Result.success(labReportService.getTrend(patientId, indicator));
+                           @RequestParam String indicator,
+                           @RequestParam(required = false) String subItem) {
+        return Result.success(labReportService.getTrend(patientId, indicator, subItem));
     }
 
     // ── 批量写入（CGM / HL7仿真数据） ────────────────────────

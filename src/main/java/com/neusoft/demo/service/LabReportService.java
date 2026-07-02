@@ -39,7 +39,7 @@ public interface LabReportService {
     List<String> getAvailableIndicators(Long patientId);
 
     /** 获取某指标历史趋势 + Python预测 */
-    Map<String, Object> getTrend(Long patientId, String indicator);
+    Map<String, Object> getTrend(Long patientId, String indicator, String subItem);
 
     /** 批量写入（HL7仿真/CGM数据用） */
     BatchLabReportCreateResponse batchCreate(BatchLabReportCreateRequest request);

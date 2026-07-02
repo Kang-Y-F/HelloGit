@@ -319,13 +319,28 @@ public class LabReportServiceImpl
     // ════════════════════════════════════════════════════════════
 
     @Override
-    public Map<String, Object> getTrend(Long patientId, String indicator) {
-        List<LabReport> list = labReportMapper.selectList(
-                new LambdaQueryWrapper<LabReport>()
-                        .eq(LabReport::getPatientId, patientId)
-                        .like(LabReport::getItemName, indicator)
-                        .orderByAsc(LabReport::getCreateTime));
+    public Map<String, Object> getTrend(Long patientId, String indicator, String subItem) {
+        String effectiveSubItem = subItem;
+        if (effectiveSubItem == null || effectiveSubItem.isBlank()) {
+            LabReport sample = labReportMapper.selectOne(
+                    new LambdaQueryWrapper<LabReport>()
+                            .eq(LabReport::getPatientId, patientId)
+                            .like(LabReport::getItemName, indicator)
+                            .isNotNull(LabReport::getSubItemName)
+                            .orderByAsc(LabReport::getSubItemName)
+                            .last("LIMIT 1"));
+            if (sample != null) effectiveSubItem = sample.getSubItemName();
+        }
 
+        LambdaQueryWrapper<LabReport> qw = new LambdaQueryWrapper<LabReport>()
+                .eq(LabReport::getPatientId, patientId)
+                .like(LabReport::getItemName, indicator);
+        qw = effectiveSubItem != null
+                ? qw.eq(LabReport::getSubItemName, effectiveSubItem)
+                : qw.isNull(LabReport::getSubItemName);
+        qw.orderByAsc(LabReport::getCreateTime);
+
+        List<LabReport> list = labReportMapper.selectList(qw);
         List<Map<String, Object>> history = new ArrayList<>();
         for (LabReport l : list) {
             Map<String, Object> p = new LinkedHashMap<>();
@@ -340,21 +355,20 @@ public class LabReportServiceImpl
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("indicator", indicator);
+        result.put("subItem", effectiveSubItem);
         result.put("patientId", patientId);
         result.put("history", history);
         result.put("count", history.size());
 
         if (history.size() >= 2) {
             String refRange = (String) history.get(0).get("referenceRange");
-            Map<String, Object> predictResult =
-                    callPythonPredictService(history, refRange, indicator);
+            Map<String, Object> predictResult = callPythonPredictService(history, refRange, indicator);
             if (predictResult != null) {
                 result.put("predictions", predictResult.get("predictions"));
                 result.put("trend", predictResult.get("trend"));
                 result.put("referenceRange", refRange);
             }
         }
-
         return result;
     }
 
