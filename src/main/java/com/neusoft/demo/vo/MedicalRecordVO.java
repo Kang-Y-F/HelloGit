@@ -65,5 +65,12 @@ public class MedicalRecordVO {
         private String referenceRange;
         private Integer abnormalFlag;
         private Integer auditStatus;
+
+        /** 套餐分组标识（血脂四项、甲状腺五项等），单项检验为 null */
+        private String suiteGroup;
+        /** 套餐子项名称（如"总胆固醇"），单项检验为 null，前端取值时 fallback 到 itemName */
+        private String subItemName;
+        /** AI 解读原文（JSON 字符串，形如 {"desc":"..."}），套餐只在代表项上有值 */
+        private String reportContent;
     }
 }

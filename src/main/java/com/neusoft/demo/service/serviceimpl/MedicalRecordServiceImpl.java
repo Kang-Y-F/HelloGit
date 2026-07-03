@@ -18,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -337,6 +337,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                                     new LambdaQueryWrapper<LabReport>()
                                             .eq(LabReport::getOrderId, co.getId())
                             );
+                            lrs = keepLatestSubmission(lrs);
                             for (LabReport lr : lrs) {
                                 PatientMedicalRecordDetailVO.LabReportVO lrVO = new PatientMedicalRecordDetailVO.LabReportVO();
                                 lrVO.setId(lr.getId());
@@ -430,7 +431,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                             List<LabReport> lrs = labReportMapper.selectList(
                                     new LambdaQueryWrapper<LabReport>()
                                             .eq(LabReport::getOrderId, co.getId())
+                                            .orderByAsc(LabReport::getId)
                             );
+                            lrs = keepLatestSubmission(lrs);
                             for (LabReport lr : lrs) {
                                 MedicalRecordVO.LabSummary ls = new MedicalRecordVO.LabSummary();
                                 ls.setId(lr.getId());
@@ -439,6 +442,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                                 ls.setReferenceRange(lr.getReferenceRange());
                                 ls.setAbnormalFlag(lr.getAbnormalFlag());
                                 ls.setAuditStatus(lr.getAuditStatus());
+                                ls.setSuiteGroup(lr.getSuiteGroup());
+                                ls.setSubItemName(lr.getSubItemName());
+                                ls.setReportContent(lr.getReportContent());
                                 labs.add(ls);
                             }
                         }
@@ -447,8 +453,56 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
             }
 
             vo.setCheckReports(checks);
+
+            // enrichWithReports 方法末尾，vo.setLabReports(labs) 之前加：
+
+// 按 suiteGroup 归并，保证同一套餐内所有子项展示的 AI 内容 / 审核状态一致
+// （兼容历史数据：即便DB里本身没同步完整，这里也兜底修正）
+            Map<String, List<MedicalRecordVO.LabSummary>> suiteGroups = labs.stream()
+                    .filter(l -> l.getSuiteGroup() != null)
+                    .collect(Collectors.groupingBy(MedicalRecordVO.LabSummary::getSuiteGroup));
+
+            for (List<MedicalRecordVO.LabSummary> group : suiteGroups.values()) {
+                // 代表行优先选"有AI内容"的那条；都没有就退化为 id 最小的一条
+                MedicalRecordVO.LabSummary rep = group.stream()
+                        .filter(l -> l.getReportContent() != null && !l.getReportContent().isBlank())
+                        .min(Comparator.comparing(MedicalRecordVO.LabSummary::getId))
+                        .orElseGet(() -> group.stream()
+                                .min(Comparator.comparing(MedicalRecordVO.LabSummary::getId))
+                                .orElseThrow());
+
+                for (MedicalRecordVO.LabSummary l : group) {
+                    l.setReportContent(rep.getReportContent());
+                    l.setAuditStatus(rep.getAuditStatus());
+                }
+            }
+
             vo.setLabReports(labs);
         }
+    }
+
+    /** 同一 order_id 下可能混有仿真回填的历史批次和真实提交批次（按 suiteGroup 或单行区分），
+     *  只保留 createTime 最新的那一批，即真正的"最终提交结果"。 */
+    private List<LabReport> keepLatestSubmission(List<LabReport> lrs) {
+        if (lrs.isEmpty()) return lrs;
+        Map<String, List<LabReport>> groups = new LinkedHashMap<>();
+        for (LabReport lr : lrs) {
+            String key = lr.getSuiteGroup() != null ? lr.getSuiteGroup() : ("single-" + lr.getId());
+            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(lr);
+        }
+        List<LabReport> latestGroup = null;
+        LocalDateTime latestTime = null;
+        for (List<LabReport> group : groups.values()) {
+            LocalDateTime groupMax = group.stream()
+                    .map(LabReport::getCreateTime)
+                    .max(Comparator.naturalOrder())
+                    .orElse(null);
+            if (groupMax != null && (latestTime == null || groupMax.isAfter(latestTime))) {
+                latestTime = groupMax;
+                latestGroup = group;
+            }
+        }
+        return latestGroup != null ? latestGroup : lrs;
     }
 
 }

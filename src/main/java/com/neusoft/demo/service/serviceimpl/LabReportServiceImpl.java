@@ -132,19 +132,21 @@ public class LabReportServiceImpl
         // 4. AI 解读：前端已确认的文本直接存；没传才兜底调 AI 生成
         //    AI 结果存在第一条记录的 report_content 里，其他子项通过 suite_group 共享
         LabReport first = saved.get(0);
+        String content;
         if (dto.getAiContent() != null && !dto.getAiContent().isBlank()) {
-            // 用户在预览面板里已经看过并确认（或编辑）过的文本，直接落库，不再重复调 AI
-            first.setReportContent(toReportContent(dto.getAiContent()));
-            labReportMapper.updateById(first);
+            content = toReportContent(dto.getAiContent());
         } else {
-            // 前端没传确认文本（比如用户没等 AI 生成完就直接提交了）——兜底自动生成，保证不会空着
             try {
-                String aiResult = generateSuiteAiSummary(saved, checkOrder.getUserId(), dto.getItemName());
-                first.setReportContent(toReportContent(aiResult));
-                labReportMapper.updateById(first);
+                content = toReportContent(generateSuiteAiSummary(saved, checkOrder.getUserId(), dto.getItemName()));
             } catch (Exception e) {
                 log.warn("AI解读兜底生成失败，suiteGroup={}, itemName={}", suiteGroup, dto.getItemName(), e);
-                // AI 失败不影响录入成功，前端可以手动点"AI解读"重新生成
+                content = null;
+            }
+        }
+        if (content != null) {
+            for (LabReport r : saved) {          // 整组同步，而不是只写 first
+                r.setReportContent(content);
+                labReportMapper.updateById(r);
             }
         }
 
@@ -263,7 +265,6 @@ public class LabReportServiceImpl
         LabReport report = labReportMapper.selectById(reportId);
         if (report == null) throw new RuntimeException("检验报告不存在");
 
-        // 如果是套餐，取同组所有子项一起解读
         List<LabReport> subItems;
         if (report.getSuiteGroup() != null) {
             subItems = labReportMapper.selectList(
@@ -275,11 +276,13 @@ public class LabReportServiceImpl
         }
 
         try {
-            String aiResult = generateSuiteAiSummary(
-                    subItems, report.getPatientId(), report.getItemName());
-            // 写入第一条（对套餐而言是 reportId 指向的那条，对单项就是它自己）
-            report.setReportContent(toReportContent(aiResult));
-            labReportMapper.updateById(report);
+            String aiResult = generateSuiteAiSummary(subItems, report.getPatientId(), report.getItemName());
+            String content = toReportContent(aiResult);
+            // 同组每条子项都写一份，保证不管谁被当"代表行"读，内容都对
+            for (LabReport s : subItems) {
+                s.setReportContent(content);
+                labReportMapper.updateById(s);
+            }
             return aiResult;
         } catch (Exception e) {
             log.error("AI解读失败 reportId={}", reportId, e);
@@ -318,18 +321,24 @@ public class LabReportServiceImpl
         if (report == null) return false;
 
         report.setAuditStatus(auditStatus);
+        String content = null;
         if (editedContent != null && !editedContent.isBlank()) {
-            report.setReportContent(toReportContent(editedContent));
+            content = toReportContent(editedContent);
+            report.setReportContent(content);
         }
 
-        // 同步更新同组其他子项的审核状态
+        // 同步更新同组其他子项：审核状态 + AI内容 都要同步，缺一不可
         if (report.getSuiteGroup() != null) {
+            String finalContent = content;
             labReportMapper.selectList(
                             new LambdaQueryWrapper<LabReport>()
                                     .eq(LabReport::getSuiteGroup, report.getSuiteGroup())
                                     .ne(LabReport::getId, reportId))
                     .forEach(s -> {
                         s.setAuditStatus(auditStatus);
+                        if (finalContent != null) {
+                            s.setReportContent(finalContent);
+                        }
                         labReportMapper.updateById(s);
                     });
         }
