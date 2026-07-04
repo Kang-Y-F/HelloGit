@@ -36,4 +36,13 @@ public class CtAnalysisController {
         boolean ok = ctAnalysisService.confirmAiAnalysis(reportId, dto);
         return ok ? Result.success("操作成功") : Result.fail("操作失败");
     }
+
+    @PostMapping("/generate-preview/{reportId}")
+    public Result<?> generatePreviewImage(@PathVariable Long reportId) {
+        try {
+            return Result.success(ctAnalysisService.generatePreviewImage(reportId));
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
 }

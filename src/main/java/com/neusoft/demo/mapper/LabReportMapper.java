@@ -56,36 +56,34 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
     @Select("""
     SELECT
         MIN(lr.id)                                    AS id,
-        lr.suite_group,
+        MIN(lr.suite_group)                           AS suite_group,
         lr.patient_id,
-        lr.order_id,
+        MIN(lr.order_id)                              AS order_id,
         lr.item_name,
         MAX(lr.abnormal_flag)                         AS abnormal_flag,
         MIN(lr.audit_status)                          AS audit_status,
-        (SELECT report_content
-         FROM   lab_report
-         WHERE  id = MIN(lr.id))                      AS report_content,
+        SUBSTRING_INDEX(
+            GROUP_CONCAT(COALESCE(lr.report_content, '') ORDER BY lr.id SEPARATOR '\\0'),
+            '\\0',
+            1
+        )                                             AS report_content,
         MIN(lr.create_time)                           AS create_time,
         CASE
-            -- 单项：直接显示检测值
-            WHEN lr.suite_group IS NULL
+            WHEN MIN(lr.suite_group) IS NULL
             THEN MIN(lr.test_value)
-            -- 真正多指标套餐（sub_item_name 有实际值且互不相同）：拼接"子项名:值"
             WHEN MAX(CASE WHEN lr.sub_item_name IS NOT NULL THEN 1 ELSE 0 END) = 1
             THEN GROUP_CONCAT(
                      CONCAT(COALESCE(lr.sub_item_name, lr.item_name), ':', lr.test_value)
                      ORDER BY lr.id
                      SEPARATOR '\\n'
                  )
-            -- 同名多时间点（CGM/动态监测）：只取最新一个点的值
             ELSE SUBSTRING_INDEX(
                      GROUP_CONCAT(lr.test_value ORDER BY lr.create_time DESC),
                      ',', 1
                  )
         END                                           AS test_value,
         MIN(lr.reference_range)                       AS reference_range,
-        COUNT(*)                                       AS sub_item_count,
-        -- 新增：标记这一组是不是"同名多时间点"类型（CGM/动态监测），前端据此区分展示
+        COUNT(*)                                      AS sub_item_count,
         MAX(CASE WHEN lr.sub_item_name IS NULL AND lr.suite_group IS NOT NULL THEN 1 ELSE 0 END) AS is_timeseries,
         p.name                                        AS patient_name
     FROM  lab_report  lr
@@ -94,9 +92,7 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
       AND DATE(lr.create_time) = CURDATE()
     GROUP BY
         COALESCE(lr.suite_group, CAST(lr.id AS CHAR)),
-        lr.suite_group,
         lr.patient_id,
-        lr.order_id,
         lr.item_name,
         p.name
     ORDER BY MIN(lr.create_time) DESC

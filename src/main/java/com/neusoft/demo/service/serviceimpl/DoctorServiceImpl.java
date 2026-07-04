@@ -45,18 +45,21 @@ public class DoctorServiceImpl implements DoctorService {
             return null;
         }
 
-// 替换原来的 PasswordUtil.matches 调用
         boolean match;
         String stored = doctor.getPassword();
         if (stored != null && stored.startsWith("$2a$")) {
             match = PasswordUtil.matches(loginDTO.getPassword(), stored);
         } else {
-            // MD5 兼容
             match = stored != null && stored.equalsIgnoreCase(md5Hex(loginDTO.getPassword()));
         }
 
         if (!match) {
             return null;
+        }
+
+        // 新增：账号被禁用，不允许登录
+        if (doctor.getStatus() != null && doctor.getStatus() == 0) {
+            throw new RuntimeException("账号已被禁用，请联系管理员");
         }
 
         String role = doctor.getRole() != null ? doctor.getRole() : "doctor";

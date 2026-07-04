@@ -48,6 +48,7 @@ public class PatientMedicalRecordDetailVO {
         private String imgType;           // 检查类型（CT/X光等）
         private String imageUrl;          // 掩码图片URL
         private String ctUrl;             // 原始CT文件URL
+        private String previewImageUrl;
         private String reportText;        // 报告文本
         private String aiAnalysis;        // AI辅助诊断分析
         private String doctorConfirmedText; // 医生确认后的最终结论

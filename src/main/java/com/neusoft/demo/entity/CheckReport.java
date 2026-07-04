@@ -25,6 +25,9 @@ public class CheckReport {
     /** 原始CT文件HTTP URL */
     private String ctUrl;
 
+    /** 患者端预览图URL（CT中间层叠加掩码后的PNG） */
+    private String previewImageUrl;
+
     private String artifactResult;
 
     private String reportText;

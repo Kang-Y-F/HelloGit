@@ -10,10 +10,14 @@ import com.neusoft.demo.service.CtAnalysisService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +31,10 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
     @Autowired private LabReportMapper      labReportMapper;
     @Autowired private AiOperationLogMapper aiLogMapper;
     @Autowired private ChatClient           chatClient;
+    @Autowired private RestTemplate restTemplate;
+
+    @Value("${python.predict.service.url}")
+    private String pythonServiceUrl;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -168,6 +176,7 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         Integer status = dto.getConfirmStatus(); // 2确认 3修改 4驳回
         String confirmedText;
         if (status == 2)      confirmedText = report.getAiAnalysis();        // 确认：直接用AI原文
+
         else if (status == 3) confirmedText = dto.getConfirmedText();        // 修改：用医生填写的
         else                  confirmedText = null;                          // 驳回：清空
 
@@ -182,7 +191,13 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         String aiOriginal   = report.getAiAnalysis();
         String doctorChange = status == 3 ? dto.getConfirmedText() : null;
         writeLog(reportId, aiOriginal, doctorChange, status);
-
+        if (rows > 0 && (status == 2 || status == 3)) {
+            try {
+                generatePreviewImage(reportId);
+            } catch (Exception e) {
+                log.warn("自动生成预览图失败，可稍后手动重试 reportId={}", reportId, e);
+            }
+        }
         return rows > 0;
     }
 
@@ -210,6 +225,48 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
             aiLogMapper.insert(log);
         } catch (Exception e) {
             log.error("写AI溯源日志失败", e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public CheckReport generatePreviewImage(Long reportId) {
+        CheckReport report = checkReportMapper.selectById(reportId);
+        if (report == null) throw new RuntimeException("影像报告不存在");
+        if (report.getCtUrl() == null || report.getImageUrl() == null) {
+            throw new RuntimeException("该报告缺少CT原图或掩码图，无法生成预览");
+        }
+
+        String url = pythonServiceUrl + "/internal/ct/generate-preview";
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("ctUrl", report.getCtUrl());
+        request.put("maskUrl", report.getImageUrl());
+        request.put("checkReportId", reportId);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
+            Map body = response.getBody();
+
+            if (body != null && body.get("code") != null && Integer.parseInt(body.get("code").toString()) == 200) {
+                Map data = (Map) body.get("data");
+                String previewImageUrl = (String) data.get("previewImageUrl");
+
+                checkReportMapper.update(null,
+                        new LambdaUpdateWrapper<CheckReport>()
+                                .eq(CheckReport::getId, reportId)
+                                .set(CheckReport::getPreviewImageUrl, previewImageUrl)
+                );
+
+                report.setPreviewImageUrl(previewImageUrl);
+                return report;
+            } else {
+                String msg = body != null ? (String) body.get("message") : "Python服务返回异常";
+                throw new RuntimeException("生成预览图失败: " + msg);
+            }
+        } catch (Exception e) {
+            log.error("调用Python生成预览图失败 reportId={}", reportId, e);
+            throw new RuntimeException("生成预览图失败，请稍后重试");
         }
     }
 }

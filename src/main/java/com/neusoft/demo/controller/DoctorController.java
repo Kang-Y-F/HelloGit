@@ -44,17 +44,19 @@ public class DoctorController {
     private ChatClient chatClient;
 
     @PostMapping("/login")
-    public Result<LoginVO> login(
-            @RequestBody LoginDTO loginDTO){
+    public Result<LoginVO> login(@RequestBody LoginDTO loginDTO){
 
-        LoginVO loginVO =
-                doctorService.login(loginDTO);
+        try {
+            LoginVO loginVO = doctorService.login(loginDTO);
 
-        if(loginVO == null){
-            return Result.fail("账号或密码错误");
+            if (loginVO == null) {
+                return Result.fail("账号或密码错误");
+            }
+
+            return Result.success(loginVO);
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
         }
-
-        return Result.success(loginVO);
     }
 
     @PostMapping("/add")

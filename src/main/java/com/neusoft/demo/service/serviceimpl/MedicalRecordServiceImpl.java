@@ -312,6 +312,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                         crVO.setImgType(cr.getImgType());
                         crVO.setImageUrl(cr.getImageUrl());
                         crVO.setCtUrl(cr.getCtUrl());
+                        crVO.setPreviewImageUrl(cr.getPreviewImageUrl());
                         crVO.setReportText(cr.getReportText());
                         crVO.setAiAnalysis(cr.getAiAnalysis());
                         crVO.setDoctorConfirmedText(cr.getDoctorConfirmedText());

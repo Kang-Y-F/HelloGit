@@ -10,4 +10,7 @@ public interface CtAnalysisService {
 
     /** 医生确认/修改/驳回 */
     boolean confirmAiAnalysis(Long reportId, CtAiConfirmDTO dto);
+
+    /** 调用Python服务生成患者端CT预览图（中间层叠加掩码PNG） */
+    CheckReport generatePreviewImage(Long reportId);
 }
