@@ -33,6 +33,9 @@ public class LabReportServiceImpl
     @Autowired private CheckOrderMapper   checkOrderMapper;
     @Autowired private MedicalOrderMapper medicalOrderMapper;
     @Autowired private ChatClient         chatClient;
+    @Autowired(required = false)
+    private com.neusoft.demo.service.McpToolService mcpToolService;
+
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -187,6 +190,26 @@ public class LabReportServiceImpl
                         h.getCreateTime().toString().substring(0, 10),
                         label, h.getTestValue(),
                         h.getAbnormalFlag() == 1 ? "⚠异常" : "正常"));
+            }
+        }
+        // ========== 使用MCP增强检验解读（如果MCP可用）==========
+        if (mcpToolService != null) {
+            try {
+                log.info("使用MCP增强检验报告解读");
+
+                // 提取异常项
+                List<String> abnormalItems = subItems.stream()
+                        .filter(r -> r.getAbnormalFlag() == 1)
+                        .map(r -> r.getSubItemName() != null ? r.getSubItemName() : r.getItemName())
+                        .toList();
+
+                if (!abnormalItems.isEmpty()) {
+                    String patientSymptoms = "检验套餐：" + suiteName;
+                    String aiResult = mcpToolService.interpretLabResultsWithMcp(abnormalItems, patientSymptoms);
+                    return aiResult;
+                }
+            } catch (Exception e) {
+                log.warn("MCP检验解读失败，降级为普通模式", e);
             }
         }
 

@@ -6,6 +6,7 @@ import com.neusoft.demo.entity.Doctor;
 import com.neusoft.demo.entity.PatientMessage;
 import com.neusoft.demo.mapper.DoctorMapper;
 import com.neusoft.demo.service.AiGuideService;
+import com.neusoft.demo.service.McpToolService;
 import com.neusoft.demo.service.PatientMessageService;
 import com.neusoft.demo.vo.GuideAnalyzeVO;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +20,6 @@ import java.util.List;
 @Service
 public class AiGuideServiceImpl implements AiGuideService {
 
-    // 复用项目已注入的AI客户端（和医生端共用）
     @Autowired
     private ChatClient chatClient;
 
@@ -29,7 +29,10 @@ public class AiGuideServiceImpl implements AiGuideService {
     @Autowired
     private PatientMessageService messageService;
 
-    // 急症关键词（与前端对齐）
+    // 新增：注入MCP工具服务（可选依赖，如果MCP未启用则降级为普通模式）
+    @Autowired(required = false)
+    private McpToolService mcpToolService;
+
     private static final List<String> EMERGENCY_KEYWORDS =
             Arrays.asList("突发剧烈头痛", "突然晕倒", "口角歪斜", "一侧偏瘫");
 
@@ -39,7 +42,6 @@ public class AiGuideServiceImpl implements AiGuideService {
         List<String> symptoms = dto.getSymptoms();
         String duration = dto.getDuration();
 
-        // ========== 第一步：规则判断急症（兜底，优先执行） ==========
         boolean isEmergency = false;
         String allSymptom = String.join("，", symptoms);
         for (String keyword : EMERGENCY_KEYWORDS) {
@@ -50,7 +52,31 @@ public class AiGuideServiceImpl implements AiGuideService {
         }
         result.setUrgency(isEmergency ? "emergency" : "normal");
 
-        // ========== 第二步：组装Prompt 调用通义千问 ==========
+        // ========== 使用MCP增强导诊（如果MCP可用）==========
+        if (mcpToolService != null) {
+            try {
+                log.info("使用MCP增强智能导诊");
+                String aiResp = mcpToolService.guidePatientWithMcp(allSymptom);
+
+                // 解析AI返回的结果
+                parseAiResponse(aiResp, result);
+
+                // 匹配医生
+                Long deptId = mapDeptToId(result.getSuggestedDept());
+                List<Doctor> doctorList = getDoctorByDept(deptId);
+                doctorList.forEach(doc -> doc.setPassword(null));
+                result.setRecommendedDoctors(doctorList);
+
+                // 发送站内消息
+                sendGuideMessage(patientId, result.getSuggestedDept());
+
+                return result;
+            } catch (Exception e) {
+                log.warn("MCP导诊失败，降级为普通模式", e);
+            }
+        }
+
+        // ========== 降级方案：原有逻辑 ==========
         String prompt = String.format("""
                 你是脑科医院智能导诊AI，请根据患者症状和持续时间，给出专业导诊结果。
                 患者症状：%s
@@ -72,7 +98,21 @@ public class AiGuideServiceImpl implements AiGuideService {
             return result;
         }
 
-        // ========== 第三步：解析AI返回内容 ==========
+        parseAiResponse(aiResp, result);
+
+        Long deptId = mapDeptToId(result.getSuggestedDept());
+        List<Doctor> doctorList = getDoctorByDept(deptId);
+        doctorList.forEach(doc -> doc.setPassword(null));
+        result.setRecommendedDoctors(doctorList);
+
+        sendGuideMessage(patientId, result.getSuggestedDept());
+
+        return result;
+    }
+
+    // ========== 辅助方法 ==========
+
+    private void parseAiResponse(String aiResp, GuideAnalyzeVO result) {
         String suggestedDept = "";
         String analysis = "";
         if (aiResp.contains("【建议科室】") && aiResp.contains("【病情分析】")) {
@@ -88,45 +128,35 @@ public class AiGuideServiceImpl implements AiGuideService {
             suggestedDept = "神经内科";
             analysis = aiResp;
         }
-
         result.setSuggestedDept(suggestedDept);
         result.setAnalysis(analysis);
+    }
 
-        // ========== 第四步：根据科室匹配在岗医生 ==========
-        // 这里做简单映射：科室名称 -> deptId，根据你实际数据库调整
-        Long deptId = switch (suggestedDept) {
+    private Long mapDeptToId(String deptName) {
+        return switch (deptName) {
             case "神经外科" -> 1L;
             case "神经内科" -> 2L;
             case "小儿神经科" -> 3L;
             default -> 1L;
         };
-        List<Doctor> doctorList = getDoctorByDept(deptId);
-        // 清空密码脱敏
-        doctorList.forEach(doc -> doc.setPassword(null));
-        result.setRecommendedDoctors(doctorList);
-
-        // ========== 新增：生成AI导诊站内消息 ==========
-        PatientMessage msg = new PatientMessage();
-        msg.setPatientId(patientId);
-        msg.setTitle("AI智能导诊分析完成");
-        msg.setContent("你提交的症状已完成AI分析，建议就诊科室：" + result.getSuggestedDept());
-        msg.setMsgType(3);
-        msg.setJumpPath("pages/guide/guide");
-        messageService.addMessage(msg);
-
-        return result;
     }
 
-    /**
-     * 根据科室ID查询在岗医生（status=1）
-     */
     private List<Doctor> getDoctorByDept(Long deptId) {
         LambdaQueryWrapper<Doctor> wrapper = new LambdaQueryWrapper<>();
         wrapper
                 .eq(Doctor::getDeptId, deptId)
                 .eq(Doctor::getRole,"doctor")
                 .eq(Doctor::getStatus, 1);
-        // 直接查询并返回，无需额外 stream 转换
         return doctorMapper.selectList(wrapper);
+    }
+
+    private void sendGuideMessage(Long patientId, String suggestedDept) {
+        PatientMessage msg = new PatientMessage();
+        msg.setPatientId(patientId);
+        msg.setTitle("AI智能导诊分析完成");
+        msg.setContent("你提交的症状已完成AI分析，建议就诊科室：" + suggestedDept);
+        msg.setMsgType(3);
+        msg.setJumpPath("pages/guide/guide");
+        messageService.addMessage(msg);
     }
 }

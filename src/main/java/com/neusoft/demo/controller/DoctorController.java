@@ -5,17 +5,18 @@ import com.neusoft.demo.common.Result;
 import com.neusoft.demo.dto.DoctorAddDTO;
 import com.neusoft.demo.dto.LoginDTO;
 import com.neusoft.demo.entity.Doctor;
-import com.neusoft.demo.entity.Doctor;
 import com.neusoft.demo.entity.RegisterOrder;
 import com.neusoft.demo.mapper.DoctorMapper;
 import com.neusoft.demo.mapper.RegisterOrderMapper;
 import com.neusoft.demo.service.DoctorService;
+import com.neusoft.demo.service.McpToolService;
 import com.neusoft.demo.service.ScheduleService;
 import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.vo.LoginVO;
 import com.neusoft.demo.vo.ScheduleVO;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/doctor")
 public class DoctorController {
@@ -42,6 +44,10 @@ public class DoctorController {
 
     @Autowired
     private ChatClient chatClient;
+
+    // 新增：可选注入MCP工具服务，MCP未就绪时自动降级，不影响原有分诊功能
+    @Autowired(required = false)
+    private McpToolService mcpToolService;
 
     @PostMapping("/login")
     public Result<LoginVO> login(@RequestBody LoginDTO loginDTO){
@@ -133,12 +139,34 @@ public class DoctorController {
     /**
      * AI 智能分诊
      * 根据症状描述，AI 给出初步分诊建议和检查推荐
+     * 升级：优先走MCP工具增强（检索医学知识库），MCP不可用时自动降级为原有纯prompt模式
      */
     @PostMapping("/triage")
     public Result<?> triage(@RequestBody Map<String, String> body) {
         String symptoms = body.getOrDefault("symptoms", "");
         if (symptoms.isBlank()) return Result.fail("请输入症状描述");
 
+        try {
+            String response;
+            if (mcpToolService != null) {
+                try {
+                    log.info("使用MCP增强智能分诊: symptoms={}", symptoms);
+                    response = mcpToolService.triageWithMcp(symptoms);
+                } catch (Exception e) {
+                    log.warn("MCP智能分诊失败，降级为普通对话模式", e);
+                    response = plainTriage(symptoms);
+                }
+            } else {
+                response = plainTriage(symptoms);
+            }
+            return Result.success(response);
+        } catch (Exception e) {
+            return Result.fail("AI服务暂时不可用：" + e.getMessage());
+        }
+    }
+
+    /** 原有的纯prompt分诊逻辑，作为MCP不可用时的降级兜底 */
+    private String plainTriage(String symptoms) {
         String prompt = String.format("""
                 你是一名专业的脑科分诊AI。患者描述如下症状：
                 
@@ -155,12 +183,7 @@ public class DoctorController {
                 （患者就诊前的注意事项，1-2条）
                 """, symptoms);
 
-        try {
-            String response = chatClient.prompt().user(prompt).call().content();
-            return Result.success(response);
-        } catch (Exception e) {
-            return Result.fail("AI服务暂时不可用：" + e.getMessage());
-        }
+        return chatClient.prompt().user(prompt).call().content();
     }
 
     // ── 工具 ──────────────────────────────────────────────────────

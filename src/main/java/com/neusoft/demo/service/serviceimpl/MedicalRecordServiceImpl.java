@@ -7,6 +7,7 @@ import com.neusoft.demo.dto.MedicalRecordDTO;
 import com.neusoft.demo.entity.*;
 import com.neusoft.demo.mapper.*;
 import com.neusoft.demo.service.MedicalRecordService;
+import com.neusoft.demo.service.McpToolService;
 import com.neusoft.demo.vo.MedicalRecordVO;
 import com.neusoft.demo.vo.PatientMedicalRecordVO;
 import com.neusoft.demo.vo.PatientMedicalRecordDetailVO;
@@ -37,6 +38,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Autowired private PmiPatientMapper pmiPatientMapper;
     @Autowired private DepartmentMapper departmentMapper;
 
+    // 新增：可选注入MCP工具服务，MCP未就绪时自动降级，不影响原有诊疗建议功能
+    @Autowired(required = false)
+    private McpToolService mcpToolService;
 
     // 日期格式化
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -84,6 +88,10 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     public MedicalRecordVO generateAiAdvice(Long recordId) {
         MedicalRecordVO vo = getDetail(recordId);
 
+        String chiefComplaint = vo.getChiefComplaint();
+        String presentHistory = vo.getPresentHistory() == null ? "暂无" : vo.getPresentHistory();
+        String checkResult    = vo.getCheckResult()    == null ? "暂无" : vo.getCheckResult();
+
         String prompt = String.format("""
                 你是一名专业的脑科AI助理医生。请根据以下患者信息，给出结构化的诊疗建议。
                 
@@ -99,17 +107,21 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                 【用药建议】
                 （填写建议用药，多项用顿号分隔，暂无则填"暂无"）
                 """,
-                vo.getChiefComplaint(),
-                vo.getPresentHistory() == null ? "暂无" : vo.getPresentHistory(),
-                vo.getCheckResult()    == null ? "暂无" : vo.getCheckResult()
+                chiefComplaint, presentHistory, checkResult
         );
 
+        // MCP优先，失败或未注入则降级为原有纯prompt模式
         String aiResponse;
-        try {
-            aiResponse = chatClient.prompt().user(prompt).call().content();
-        } catch (Exception e) {
-            log.error("AI建议生成失败 recordId={}", recordId, e);
-            throw new RuntimeException("AI服务暂时不可用，请稍后重试");
+        if (mcpToolService != null) {
+            try {
+                log.info("使用MCP增强诊疗建议生成: recordId={}", recordId);
+                aiResponse = mcpToolService.generateAdviceWithMcp(chiefComplaint, presentHistory, checkResult);
+            } catch (Exception e) {
+                log.warn("MCP诊疗建议生成失败，降级为普通对话模式 recordId={}", recordId, e);
+                aiResponse = plainGenerate(prompt, recordId);
+            }
+        } else {
+            aiResponse = plainGenerate(prompt, recordId);
         }
 
         String aiDiagnosis   = extractSection(aiResponse, "【诊断建议】", "【检查建议】");
@@ -133,6 +145,16 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         vo.setAiDrugAdvice(aiDrugAdvice);
         vo.setAiConfirmStatus(0);
         return vo;
+    }
+
+    /** 原有的纯prompt诊疗建议逻辑，作为MCP不可用时的降级兜底 */
+    private String plainGenerate(String prompt, Long recordId) {
+        try {
+            return chatClient.prompt().user(prompt).call().content();
+        } catch (Exception e) {
+            log.error("AI建议生成失败 recordId={}", recordId, e);
+            throw new RuntimeException("AI服务暂时不可用，请稍后重试");
+        }
     }
 
     @Override

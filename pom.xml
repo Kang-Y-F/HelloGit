@@ -50,6 +50,15 @@
 			<artifactId>spring-ai-starter-model-chat-memory-jdbc</artifactId>
 		</dependency>
 
+		<!-- 新增：Spring AI MCP Client支持 -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-client</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-client-webflux</artifactId>
+		</dependency>
 		<!-- Redis 依赖 -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -118,6 +127,17 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+
+	<repositories>
+		<repository>
+			<id>spring-milestones</id>
+			<name>Spring Milestones</name>
+			<url>https://repo.spring.io/milestone</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
 
 	<build>
 		<plugins>

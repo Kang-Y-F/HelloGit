@@ -7,6 +7,7 @@ import com.neusoft.demo.dto.CtAiConfirmDTO;
 import com.neusoft.demo.entity.*;
 import com.neusoft.demo.mapper.*;
 import com.neusoft.demo.service.CtAnalysisService;
+import com.neusoft.demo.service.McpToolService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,10 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
     @Autowired private ChatClient           chatClient;
     @Autowired private RestTemplate restTemplate;
 
+    // 新增：可选注入MCP工具服务，MCP未就绪时自动降级，不影响原有影像分析功能
+    @Autowired(required = false)
+    private McpToolService mcpToolService;
+
     @Value("${python.predict.service.url}")
     private String pythonServiceUrl;
 
@@ -48,8 +53,8 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         PmiPatient patient = pmiPatientMapper.selectById(report.getPatientId());
         String patientInfo = patient != null
                 ? String.format("姓名：%s，性别：%s",
-                        patient.getName(),
-                        patient.getGender() == null ? "未知" : (patient.getGender() == 1 ? "男" : "女"))
+                patient.getName(),
+                patient.getGender() == null ? "未知" : (patient.getGender() == 1 ? "男" : "女"))
                 : "患者信息缺失";
 
         // 2. 收集伪影数据
@@ -109,7 +114,7 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
             }
         }
 
-        // 5. 构造 Prompt 调大模型
+        // 5. 构造 Prompt 调大模型（MCP优先，失败或未注入则降级为原有纯prompt模式）
         String prompt = String.format("""
                 你是一名专业的脑科影像AI辅助诊断助手。请根据以下患者完整资料，给出结构化的影像分析报告。
                 
@@ -144,11 +149,18 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         );
 
         String aiResponse;
-        try {
-            aiResponse = chatClient.prompt().user(prompt).call().content();
-        } catch (Exception e) {
-            log.error("AI影像分析生成失败 reportId={}", reportId, e);
-            throw new RuntimeException("AI服务暂时不可用，请稍后重试");
+        if (mcpToolService != null) {
+            try {
+                log.info("使用MCP增强CT影像分析: reportId={}", reportId);
+                aiResponse = mcpToolService.analyzeCtWithMcp(
+                        reportId, patientInfo, artifactInfo,
+                        recordInfo.toString(), labInfo.toString());
+            } catch (Exception e) {
+                log.warn("MCP影像分析失败，降级为普通对话模式 reportId={}", reportId, e);
+                aiResponse = plainAnalyze(prompt, reportId);
+            }
+        } else {
+            aiResponse = plainAnalyze(prompt, reportId);
         }
 
         // 6. 写库
@@ -165,6 +177,16 @@ public class CtAnalysisServiceImpl implements CtAnalysisService {
         report.setAiAnalysis(aiResponse);
         report.setAiConfirmStatus(1);
         return report;
+    }
+
+    /** 原有的纯prompt影像分析逻辑，作为MCP不可用时的降级兜底 */
+    private String plainAnalyze(String prompt, Long reportId) {
+        try {
+            return chatClient.prompt().user(prompt).call().content();
+        } catch (Exception e) {
+            log.error("AI影像分析生成失败 reportId={}", reportId, e);
+            throw new RuntimeException("AI服务暂时不可用，请稍后重试");
+        }
     }
 
     @Override
