@@ -136,6 +136,7 @@ public class DoctorServiceImpl implements DoctorService {
                         .eq(RegisterOrder::getId, registerOrderId)
                         .eq(RegisterOrder::getStatus, 3)
                         .set(RegisterOrder::getStatus, 4)
+                        .set(RegisterOrder::getFinishTime, java.time.LocalDateTime.now())   // ← 加这行
         ) > 0;
     }
 

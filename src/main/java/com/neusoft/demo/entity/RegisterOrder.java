@@ -39,4 +39,6 @@ public class RegisterOrder {
 
     /** 挂号来源：online=线上挂号(患者端) offline=线下挂号(挂号员) */
     private String source;
+
+    private LocalDateTime finishTime;
 }

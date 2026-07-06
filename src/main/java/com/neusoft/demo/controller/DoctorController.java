@@ -103,7 +103,7 @@ public class DoctorController {
         doctor.setPassword(null);
 
         long todayTotal    = count(doctorId, null,  null);
-        long todayFinished = count(doctorId, "status", "4");
+        long todayFinished = countFinishedToday(doctorId);   // ← 改成专门的方法
         long todayUrgent   = count(doctorId, "priority", "1");
 
         Map<String, Object> result = new HashMap<>();
@@ -113,6 +113,15 @@ public class DoctorController {
         result.put("todayUrgent",   todayUrgent);
         result.put("todayWaiting",  todayTotal - todayFinished);
         return Result.success(result);
+    }
+
+    // 新增：按"完成时间是今天"统计，而不是按挂号时间
+    private long countFinishedToday(Long doctorId) {
+        LambdaQueryWrapper<RegisterOrder> w = new LambdaQueryWrapper<RegisterOrder>()
+                .eq(RegisterOrder::getDoctorId, doctorId)
+                .eq(RegisterOrder::getStatus, 4)
+                .apply("DATE(finish_time) = CURDATE()");
+        return registerOrderMapper.selectCount(w);
     }
 
     /** 搜索患者 */
