@@ -285,31 +285,43 @@ public class McpToolServiceImpl implements McpToolService {
 
     // ========== 新增：诊疗建议生成 ==========
     @Override
-    public String generateAdviceWithMcp(String chiefComplaint, String presentHistory, String checkResult) {
-        log.info("MCP工具调用 - 诊疗建议生成: chiefComplaint={}", chiefComplaint);
+    public String generateAdviceWithMcp(String chiefComplaint, String presentHistory, String checkResult,
+                                        String checkCandidates, String labCandidates, String drugCandidates) {
+        log.info("MCP工具调用 - 诊疗建议生成（含候选清单）: chiefComplaint={}", chiefComplaint);
 
         String prompt = String.format("""
-            你是一名专业的脑科AI助理医生。请使用MCP工具检索相关医学知识后，
-            根据以下患者信息，给出结构化的诊疗建议。
-            
-            患者主诉：%s
-            现病史：%s
-            初步检查结果：%s
-            
-            请按以下步骤操作：
-            1. 调用 query_medical_knowledge 工具检索与主诉/检查结果相关的疾病知识
-            2. 结合检索结果给出建议
-            
-            请严格按照以下格式输出，不要添加其他内容：
-            【诊断建议】
-            （填写初步诊断）
-            【检查建议】
-            （填写建议检查项目，多项用顿号分隔）
-            【用药建议】
-            （填写建议用药，多项用顿号分隔，暂无则填"暂无"）
-            
-            注意：必须基于工具返回的知识回答！
-            """, chiefComplaint, presentHistory, checkResult);
+        你是一名专业的脑科AI助理医生。请使用MCP工具检索相关医学知识后，
+        根据以下患者信息，并【严格从下方"可选项目清单"中挑选】，给出结构化的诊疗建议。
+
+        患者主诉：%s
+        现病史：%s
+        初步检查结果：%s
+
+        ━━━ 可选检查项目（本科室） ━━━
+        %s
+
+        ━━━ 可选检验项目（本科室） ━━━
+        %s
+
+        ━━━ 可选药品（含处方属性与禁忌） ━━━
+        %s
+
+        请按以下步骤操作：
+        1. 调用 query_medical_knowledge 工具检索与主诉/检查结果相关的疾病知识
+        2. 结合检索结果，并仅在上面清单范围内挑选检查、检验、药品
+
+        请严格按照以下格式输出，不要添加其他内容：
+        【诊断建议】
+        （填写初步诊断）
+        【检查建议】
+        （只能从"可选检查项目"清单中选择，多项用顿号分隔，若无需检查填"暂无"）
+        【检验建议】
+        （只能从"可选检验项目"清单中选择，多项用顿号分隔，若无需检验填"暂无"）
+        【用药建议】
+        （只能从"可选药品"清单中选择，注意避开患者禁忌与处方权限，多项用顿号分隔，暂无则填"暂无"）
+
+        注意：必须基于工具返回的知识回答！清单之外的项目/药品一律不允许出现，清单为空或无合适项时直接填"暂无"，不要编造。
+        """, chiefComplaint, presentHistory, checkResult, checkCandidates, labCandidates, drugCandidates);
 
         try {
             String result = chatClient.prompt()

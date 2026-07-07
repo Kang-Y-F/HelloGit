@@ -27,6 +27,7 @@ public class MedicalRecordVO {
     private String aiDiagnosis;
     private String aiCheckAdvice;
     private String aiDrugAdvice;
+    private String aiLabAdvice;
     private Integer aiConfirmStatus;
 
     private LocalDateTime createTime;

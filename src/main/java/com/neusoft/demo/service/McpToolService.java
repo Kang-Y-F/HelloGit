@@ -31,6 +31,7 @@ public interface McpToolService {
     String analyzeCtWithMcp(Long reportId, String patientInfo, String artifactInfo,
                             String recordInfo, String labInfo);
 
-    /** 病历诊疗建议生成（查医学知识） */
-    String generateAdviceWithMcp(String chiefComplaint, String presentHistory, String checkResult);
+    /** 病历诊疗建议生成（查医学知识 + 数据库候选项目/药品清单） */
+    String generateAdviceWithMcp(String chiefComplaint, String presentHistory, String checkResult,
+                                 String checkCandidates, String labCandidates, String drugCandidates);
 }

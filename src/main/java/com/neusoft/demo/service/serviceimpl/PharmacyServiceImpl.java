@@ -33,6 +33,7 @@ public class PharmacyServiceImpl implements PharmacyService {
     @Autowired private DoctorMapper            doctorMapper;
     @Autowired private PmiPatientMapper        pmiPatientMapper;
     @Autowired private ChatClient              chatClient;
+    @Autowired private MedicalOrderMapper medicalOrderMapper;
 
     private final ObjectMapper om = new ObjectMapper();
 
@@ -386,6 +387,8 @@ public class PharmacyServiceImpl implements PharmacyService {
         dispenseRecordMapper.insert(rec);
 
         // 减库存 + 写出库记录 + 更新处方状态
+        // 减库存 + 写出库记录 + 更新处方状态
+        Set<Long> affectedOrderIds = new HashSet<>();  // 收集受影响的医嘱ID
         for (Long pid : dto.getPrescriptionIds()) {
             Prescription p = prescriptionMapper.selectById(pid);
             int qty = p.getQuantity() == null ? 1 : p.getQuantity();
@@ -403,7 +406,6 @@ public class PharmacyServiceImpl implements PharmacyService {
                                 .set(DrugInventory::getTotalOut, inv.getTotalOut() + qty)
                                 .set(DrugInventory::getLastOutTime, LocalDateTime.now())
                 );
-                // 出库记录
                 DrugInoutRecord outRec = new DrugInoutRecord();
                 outRec.setRecordNo(generateNo("OUT"));
                 outRec.setDrugId(p.getDrugId());
@@ -426,7 +428,24 @@ public class PharmacyServiceImpl implements PharmacyService {
                             .eq(Prescription::getId, pid)
                             .set(Prescription::getDispenseStatus, 1)
             );
+
+            if (p.getOrderId() != null) affectedOrderIds.add(p.getOrderId());
         }
+
+// ★ 新增：同步更新对应医嘱(medical_order)的执行状态
+        for (Long orderId : affectedOrderIds) {
+            // 查该医嘱下是否还有未发药的处方
+            Long undispensedCount = prescriptionMapper.selectCount(
+                    new LambdaQueryWrapper<Prescription>()
+                            .eq(Prescription::getOrderId, orderId)
+                            .and(w -> w.eq(Prescription::getDispenseStatus, 0)
+                                    .or().isNull(Prescription::getDispenseStatus))
+            );
+            if (undispensedCount == 0) {
+                medicalOrderMapper.updateExecStatus(orderId, 2); // 2=已完成
+            }
+        }
+
         return rec;
     }
 

@@ -19,4 +19,6 @@ public class AiConfirmDTO {
 
     /** 修改后的用药建议（可选） */
     private String aiDrugAdvice;
+
+    private String aiLabAdvice;
 }

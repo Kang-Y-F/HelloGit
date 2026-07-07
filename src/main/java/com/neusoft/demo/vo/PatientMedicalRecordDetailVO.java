@@ -25,6 +25,7 @@ public class PatientMedicalRecordDetailVO {
     // ========== AI辅助信息 ==========
     private String aiDiagnosis;          // AI诊断建议
     private String aiCheckAdvice;        // AI检查建议
+    private String aiLabAdvice;          // AI检验建议
     private String aiDrugAdvice;         // AI用药建议
     private Integer aiConfirmStatus;     // AI确认状态：0未确认 1已确认 2修改后确认 3驳回
 

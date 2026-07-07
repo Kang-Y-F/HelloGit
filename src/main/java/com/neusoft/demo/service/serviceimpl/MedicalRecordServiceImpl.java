@@ -16,6 +16,10 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.neusoft.demo.entity.CheckItem;
+import com.neusoft.demo.entity.Drug;
+import com.neusoft.demo.mapper.CheckItemMapper;
+import com.neusoft.demo.mapper.DrugMapper;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,6 +41,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     @Autowired private PrescriptionMapper prescriptionMapper;
     @Autowired private PmiPatientMapper pmiPatientMapper;
     @Autowired private DepartmentMapper departmentMapper;
+
+    @Autowired private CheckItemMapper checkItemMapper;
+    @Autowired private DrugMapper drugMapper;
 
     // 新增：可选注入MCP工具服务，MCP未就绪时自动降级，不影响原有诊疗建议功能
     @Autowired(required = false)
@@ -92,30 +99,56 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         String presentHistory = vo.getPresentHistory() == null ? "暂无" : vo.getPresentHistory();
         String checkResult    = vo.getCheckResult()    == null ? "暂无" : vo.getCheckResult();
 
+        // 查医生所属科室，用于过滤检查/检验候选项目（跨科室不建议）
+        Long deptId = null;
+        if (vo.getDoctorId() != null) {
+            Doctor doctor = doctorMapper.selectById(vo.getDoctorId());
+            if (doctor != null) deptId = doctor.getDeptId();
+        }
+
+        String checkCandidates = buildCheckItemCandidates(deptId, 1);
+        String labCandidates    = buildCheckItemCandidates(deptId, 2);
+        String drugCandidates   = buildDrugCandidates();
+
         String prompt = String.format("""
-                你是一名专业的脑科AI助理医生。请根据以下患者信息，给出结构化的诊疗建议。
-                
-                患者主诉：%s
-                现病史：%s
-                初步检查结果：%s
-                
-                请严格按照以下格式输出，不要添加其他内容：
-                【诊断建议】
-                （填写初步诊断）
-                【检查建议】
-                （填写建议检查项目，多项用顿号分隔）
-                【用药建议】
-                （填写建议用药，多项用顿号分隔，暂无则填"暂无"）
-                """,
-                chiefComplaint, presentHistory, checkResult
+            你是一名专业的脑科AI助理医生。请根据以下患者信息，并【严格从下方"可选项目清单"中挑选】，给出结构化的诊疗建议。
+
+            患者主诉：%s
+            现病史：%s
+            初步检查结果：%s
+
+            ━━━ 可选检查项目（本科室） ━━━
+            %s
+
+            ━━━ 可选检验项目（本科室） ━━━
+            %s
+
+            ━━━ 可选药品（含处方属性与禁忌） ━━━
+            %s
+
+            请严格按照以下格式输出，不要添加其他内容：
+            【诊断建议】
+            （填写初步诊断）
+            【检查建议】
+            （只能从"可选检查项目"清单中选择，多项用顿号分隔，若无需检查填"暂无"）
+            【检验建议】
+            （只能从"可选检验项目"清单中选择，多项用顿号分隔，若无需检验填"暂无"）
+            【用药建议】
+            （只能从"可选药品"清单中选择，注意避开患者禁忌与处方权限，多项用顿号分隔，暂无则填"暂无"）
+
+            注意：清单之外的项目/药品一律不允许出现，清单为空或无合适项时直接填"暂无"，不要编造。
+            """,
+                chiefComplaint, presentHistory, checkResult,
+                checkCandidates, labCandidates, drugCandidates
         );
 
-        // MCP优先，失败或未注入则降级为原有纯prompt模式
         String aiResponse;
         if (mcpToolService != null) {
             try {
                 log.info("使用MCP增强诊疗建议生成: recordId={}", recordId);
-                aiResponse = mcpToolService.generateAdviceWithMcp(chiefComplaint, presentHistory, checkResult);
+                aiResponse = mcpToolService.generateAdviceWithMcp(
+                        chiefComplaint, presentHistory, checkResult,
+                        checkCandidates, labCandidates, drugCandidates);
             } catch (Exception e) {
                 log.warn("MCP诊疗建议生成失败，降级为普通对话模式 recordId={}", recordId, e);
                 aiResponse = plainGenerate(prompt, recordId);
@@ -125,7 +158,8 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         }
 
         String aiDiagnosis   = extractSection(aiResponse, "【诊断建议】", "【检查建议】");
-        String aiCheckAdvice = extractSection(aiResponse, "【检查建议】", "【用药建议】");
+        String aiCheckAdvice = extractSection(aiResponse, "【检查建议】", "【检验建议】");
+        String aiLabAdvice   = extractSection(aiResponse, "【检验建议】", "【用药建议】");
         String aiDrugAdvice  = extractSection(aiResponse, "【用药建议】", null);
 
         medicalRecordMapper.update(null,
@@ -133,15 +167,16 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                         .eq(MedicalRecord::getId, recordId)
                         .set(MedicalRecord::getAiDiagnosis,    aiDiagnosis)
                         .set(MedicalRecord::getAiCheckAdvice,  aiCheckAdvice)
+                        .set(MedicalRecord::getAiLabAdvice,    aiLabAdvice)
                         .set(MedicalRecord::getAiDrugAdvice,   aiDrugAdvice)
                         .set(MedicalRecord::getAiConfirmStatus, 0)
         );
 
-        // 写溯源日志：0=查看（AI建议已生成）
         writeLog(recordId, aiResponse, null, 0);
 
         vo.setAiDiagnosis(aiDiagnosis);
         vo.setAiCheckAdvice(aiCheckAdvice);
+        vo.setAiLabAdvice(aiLabAdvice);
         vo.setAiDrugAdvice(aiDrugAdvice);
         vo.setAiConfirmStatus(0);
         return vo;
@@ -157,13 +192,52 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         }
     }
 
+    /**
+     * 构建检查/检验候选项目清单文本
+     * @param deptId   科室ID，为null时不按科室过滤（全院项目）
+     * @param itemType 1=检查 2=检验
+     */
+    private String buildCheckItemCandidates(Long deptId, Integer itemType) {
+        LambdaQueryWrapper<CheckItem> w = new LambdaQueryWrapper<CheckItem>()
+                .eq(CheckItem::getItemType, itemType);
+        if (deptId != null) {
+            w.eq(CheckItem::getDeptId, deptId);
+        }
+        List<CheckItem> items = checkItemMapper.selectList(w);
+        if (items.isEmpty()) return "（本科室暂无可选项目）";
+
+        return items.stream()
+                .map(i -> String.format("%s（¥%.2f）", i.getName(), i.getPrice()))
+                .collect(Collectors.joining("、"));
+    }
+
+    /** 构建可用药品候选清单文本（含处方属性与禁忌，供AI规避禁忌用药） */
+    private String buildDrugCandidates() {
+        List<Drug> drugs = drugMapper.selectList(
+                new LambdaQueryWrapper<Drug>().eq(Drug::getStatus, 1)   // 仅启用状态
+        );
+        if (drugs.isEmpty()) return "（暂无可选药品）";
+
+        return drugs.stream()
+                .map(d -> {
+                    String presFlag = (d.getIsPrescription() != null && d.getIsPrescription() == 1) ? "处方药" : "非处方药";
+                    String contra = (d.getContraindication() == null || d.getContraindication().isBlank())
+                            ? "无特殊禁忌" : d.getContraindication();
+                    return String.format("%s[%s，规格：%s，禁忌：%s]",
+                            d.getDrugName(), presFlag,
+                            d.getSpecification() == null ? "未注明" : d.getSpecification(),
+                            contra);
+                })
+                .collect(Collectors.joining("；"));
+    }
+
+
     @Override
     @Transactional
     public boolean confirmAi(Long recordId, AiConfirmDTO dto) {
-        // 查原始AI内容
         MedicalRecordVO old = getDetail(recordId);
-        String aiOriginal = String.format("诊断：%s | 检查：%s | 用药：%s",
-                old.getAiDiagnosis(), old.getAiCheckAdvice(), old.getAiDrugAdvice());
+        String aiOriginal = String.format("诊断：%s | 检查：%s | 检验：%s | 用药：%s",
+                old.getAiDiagnosis(), old.getAiCheckAdvice(), old.getAiLabAdvice(), old.getAiDrugAdvice());
 
         LambdaUpdateWrapper<MedicalRecord> wrapper =
                 new LambdaUpdateWrapper<MedicalRecord>()
@@ -172,16 +246,16 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
 
         if (dto.getDiagnosis()     != null) wrapper.set(MedicalRecord::getDiagnosis,    dto.getDiagnosis());
         if (dto.getAiCheckAdvice() != null) wrapper.set(MedicalRecord::getAiCheckAdvice, dto.getAiCheckAdvice());
+        if (dto.getAiLabAdvice()   != null) wrapper.set(MedicalRecord::getAiLabAdvice,   dto.getAiLabAdvice());
         if (dto.getAiDrugAdvice()  != null) wrapper.set(MedicalRecord::getAiDrugAdvice,  dto.getAiDrugAdvice());
 
         boolean ok = medicalRecordMapper.update(null, wrapper) > 0;
 
         if (ok) {
-            // 写溯源日志
             String doctorModify = null;
             if (dto.getConfirmStatus() == 2) {
-                doctorModify = String.format("诊断：%s | 检查：%s | 用药：%s",
-                        dto.getDiagnosis(), dto.getAiCheckAdvice(), dto.getAiDrugAdvice());
+                doctorModify = String.format("诊断：%s | 检查：%s | 检验：%s | 用药：%s",
+                        dto.getDiagnosis(), dto.getAiCheckAdvice(), dto.getAiLabAdvice(), dto.getAiDrugAdvice());
             }
             writeLog(recordId, aiOriginal, doctorModify, dto.getConfirmStatus());
         }

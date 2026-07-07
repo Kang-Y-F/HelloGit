@@ -30,6 +30,8 @@ public class MedicalRecord {
 
     private String aiCheckAdvice;
 
+    private String aiLabAdvice;
+
     private String aiDrugAdvice;
 
     /** 0未确认 1已确认 2修改后确认 3驳回 */
