@@ -44,4 +44,33 @@ public interface RegisterOrderMapper extends BaseMapper<RegisterOrder> {
     List<Map<String, Object>> deptRank();
 
     List<Map<String, Object>> doctorLoad();
+
+    /** 挂号状态分布（环形图用） */
+    @Select("""
+            SELECT status, COUNT(*) AS cnt
+            FROM register_order
+            GROUP BY status
+            """)
+    List<Map<String, Object>> selectStatusDistribution();
+
+    /** 近7日挂号量趋势（柱状图用） */
+    @Select("""
+            SELECT DATE(create_time) AS day, COUNT(*) AS cnt
+            FROM register_order
+            WHERE create_time >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(create_time)
+            ORDER BY day ASC
+            """)
+    List<Map<String, Object>> selectTrend7Days();
+
+    /** Top5 医生挂号量排行 */
+    @Select("""
+            SELECT d.name AS doctorName, COUNT(*) AS cnt
+            FROM register_order ro
+            LEFT JOIN doctor d ON ro.doctor_id = d.id
+            GROUP BY ro.doctor_id, d.name
+            ORDER BY cnt DESC
+            LIMIT 5
+            """)
+    List<Map<String, Object>> selectDoctorRankTop5();
 }

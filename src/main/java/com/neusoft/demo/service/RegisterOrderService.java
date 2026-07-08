@@ -28,4 +28,10 @@ public interface RegisterOrderService {
      * 患者端：挂号单详情
      */
     RegisterOrderVO patientDetail(Long id);
+
+    /**
+     * 挂号员修改优先级（普通/急诊互改）
+     * @param operatorId 操作人ID，暂无员工登录体系时可为 null
+     */
+    String updatePriority(Long operatorId, Long orderId, Integer newPriority, String reason);
 }

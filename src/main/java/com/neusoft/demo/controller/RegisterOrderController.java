@@ -3,7 +3,9 @@ package com.neusoft.demo.controller;
 import com.neusoft.demo.common.Result;
 import com.neusoft.demo.entity.RegisterOrder;
 import com.neusoft.demo.service.RegisterOrderService;
+import com.neusoft.demo.utils.JwtUtil;
 import com.neusoft.demo.vo.RegisterOrderVO;
+import io.jsonwebtoken.Claims;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -87,5 +89,32 @@ public class RegisterOrderController {
         }
 
         return Result.success(vo);
+    }
+    /**
+     * 挂号员修改优先级（普通 <-> 急诊）
+     */
+    @PostMapping("/updatePriority")
+    public Result<?> updatePriority(
+            HttpServletRequest request,
+            @RequestParam Long orderId,
+            @RequestParam Integer newPriority,
+            @RequestParam String reason
+    ) {
+        Long operatorId = parseDoctorId(request);
+
+        String result = registerOrderService.updatePriority(operatorId, orderId, newPriority, reason);
+
+        if ("修改成功".equals(result)) {
+            return Result.success(result);
+        }
+        return Result.fail(result);
+    }
+
+    /**
+     * 从 token 中解析当前登录人 id（挂号员/医生/药师统一走 doctor 表）
+     */
+    private Long parseDoctorId(HttpServletRequest request) {
+        Claims claims = JwtUtil.parseToken(request.getHeader("token"));
+        return claims.get("userId", Long.class);
     }
 }

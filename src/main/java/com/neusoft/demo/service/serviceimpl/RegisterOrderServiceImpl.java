@@ -42,6 +42,8 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
     @Autowired
     private RegisterExceptionLogMapper registerExceptionLogMapper;
 
+    @Autowired
+    private RegisterPriorityLogMapper registerPriorityLogMapper;
 
     @Override
     public RegisterOrder getById(Long id) {
@@ -212,5 +214,45 @@ public class RegisterOrderServiceImpl implements RegisterOrderService {
 
         return registerOrderMapper.getPatientDetail(id);
 
+    }
+
+    @Override
+    public String updatePriority(Long operatorId, Long orderId, Integer newPriority, String reason) {
+
+        if (newPriority == null || (newPriority != 0 && newPriority != 1)) {
+            return "优先级参数非法";
+        }
+        if (reason == null || reason.trim().isEmpty()) {
+            return "请填写修改原因";
+        }
+
+        RegisterOrder order = registerOrderMapper.selectById(orderId);
+        if (order == null) {
+            return "挂号单不存在";
+        }
+
+        // 已取消 / 已完成的订单不允许再改优先级
+        if (order.getStatus() == 2 || order.getStatus() == 4) {
+            return "该订单当前状态不允许修改优先级";
+        }
+
+        if (newPriority.equals(order.getPriority())) {
+            return "优先级未发生变化";
+        }
+
+        // 记录日志（先记录旧值，再更新）
+        RegisterPriorityLog log = new RegisterPriorityLog();
+        log.setOrderId(orderId);
+        log.setOldPriority(order.getPriority());
+        log.setNewPriority(newPriority);
+        log.setOperatorId(operatorId); // 暂无员工登录体系，可能为 null
+        log.setReason(reason.trim());
+        log.setCreateTime(LocalDateTime.now());
+        registerPriorityLogMapper.insert(log);
+
+        order.setPriority(newPriority);
+        registerOrderMapper.updateById(order);
+
+        return "修改成功";
     }
 }

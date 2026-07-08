@@ -32,4 +32,5 @@ public interface PharmacyService {
 
     // ── 统计 ───────────────────────────────
     Map<String, Object> todayStats(Long pharmacistId);
+    Map<String, Object> dashboardStats();
 }

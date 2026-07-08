@@ -148,4 +148,10 @@ public class PharmacyController {
         Claims claims = JwtUtil.parseToken(request.getHeader("token"));
         return claims.get("userId", Long.class);
     }
+
+    /** 药房数据总览看板 */
+    @GetMapping("/dashboard-stats")
+    public Result<?> dashboardStats() {
+        return Result.success(pharmacyService.dashboardStats());
+    }
 }

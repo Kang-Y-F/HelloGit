@@ -34,6 +34,7 @@ public class PharmacyServiceImpl implements PharmacyService {
     @Autowired private PmiPatientMapper        pmiPatientMapper;
     @Autowired private ChatClient              chatClient;
     @Autowired private MedicalOrderMapper medicalOrderMapper;
+    @Autowired private PharmacyDashboardMapper pharmacyDashboardMapper;
 
     private final ObjectMapper om = new ObjectMapper();
 
@@ -490,6 +491,39 @@ public class PharmacyServiceImpl implements PharmacyService {
         result.put("pendingAudit",    pendingAudit);
         result.put("pendingDispense", pendingDispense);
         result.put("lowStock",        lowStock);
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> dashboardStats() {
+        Map<String, Object> result = new HashMap<>();
+
+        // 1. 今日发药金额 + 处方数（基于 dispense_record 或 prescription.presc_status=2 已发药）
+        Map<String, Object> todayDispense = pharmacyDashboardMapper.todayDispenseSummary();
+        result.put("todayDispenseAmount", todayDispense.getOrDefault("amount", BigDecimal.ZERO));
+        result.put("todayPrescriptionCount", todayDispense.getOrDefault("count", 0));
+
+        // 2. 库存总价值 + 健康度 + 低库存数量
+        Map<String, Object> inv = pharmacyDashboardMapper.inventorySummary();
+        result.put("totalInventoryValue", inv.get("totalValue"));
+        result.put("stockHealthRate", inv.get("healthRate"));
+        result.put("lowStockCount", inv.get("lowStockCount"));
+
+        // 3. 分类库存分布
+        result.put("categoryDistribution", pharmacyDashboardMapper.categoryDistribution());
+
+        // 4. 近7日出入库趋势
+        result.put("trend7d", pharmacyDashboardMapper.trend7d());
+
+        // 5. Top10 发药排行
+        result.put("topDrugsOut", pharmacyDashboardMapper.topDrugsOut());
+
+        // 6. AI审方分布
+        result.put("auditStats", pharmacyDashboardMapper.auditStats());
+
+        // 7. 低库存明细列表
+        result.put("lowStockList", pharmacyDashboardMapper.lowStockList());
+
         return result;
     }
 
