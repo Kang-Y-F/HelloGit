@@ -42,4 +42,6 @@ public class CheckReport {
     private Integer aiConfirmStatus;
 
     private LocalDateTime createTime;
+
+    private String deartiCtUrl;
 }

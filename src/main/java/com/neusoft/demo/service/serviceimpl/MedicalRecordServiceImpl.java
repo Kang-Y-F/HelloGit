@@ -513,6 +513,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                         cs.setAiAnalysis(cr.getAiAnalysis());
                         cs.setImageUrl(cr.getImageUrl());
                         cs.setCtUrl(cr.getCtUrl());
+                        cs.setDeartiCtUrl(cr.getDeartiCtUrl());
                         cs.setArtifactResult(cr.getArtifactResult());
                         cs.setPatientId(cr.getPatientId());
                         checks.add(cs);

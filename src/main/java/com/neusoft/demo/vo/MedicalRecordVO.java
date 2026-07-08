@@ -56,6 +56,8 @@ public class MedicalRecordVO {
         private String artifactResult;
         /** 患者ID（用于跳转） */
         private Long patientId;
+
+        private String deartiCtUrl;
     }
 
     @Data
